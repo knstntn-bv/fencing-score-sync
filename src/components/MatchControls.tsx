@@ -7,7 +7,6 @@ interface MatchControlsProps {
 
 export default function MatchControls({ onReset }: MatchControlsProps) {
   const handleReset = () => {
-    console.log("Reset button clicked");
     onReset();
   };
 

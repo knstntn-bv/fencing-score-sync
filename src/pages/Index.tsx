@@ -98,7 +98,7 @@ const Index = ({ settings }: IndexProps) => {
             score={player1Score}
             onIncrement={incrementPlayer1}
             onDecrement={decrementPlayer1}
-            disabled={isTimerRunning}
+            disabled={isTimerRunning || winner !== null}
             colorScheme="blue"
           />
           
@@ -107,7 +107,7 @@ const Index = ({ settings }: IndexProps) => {
             score={player2Score}
             onIncrement={incrementPlayer2}
             onDecrement={decrementPlayer2}
-            disabled={isTimerRunning}
+            disabled={isTimerRunning || winner !== null}
             colorScheme="red"
           />
         </div>
