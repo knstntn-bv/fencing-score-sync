@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Play, Pause, RotateCcw } from "lucide-react";
+import { Play, Pause } from "lucide-react";
 
 interface TimerProps {
   initialMinutes?: number;
@@ -19,8 +19,9 @@ export default function Timer({ initialMinutes = 3, onStateChange }: TimerProps)
       interval = setInterval(() => {
         setTimeLeft(time => time - 1);
       }, 1000);
-    } else if (timeLeft === 0) {
+    } else if (timeLeft === 0 && isRunning) {
       setIsRunning(false);
+      onStateChange?.(false);
     }
 
     return () => {
@@ -41,7 +42,7 @@ export default function Timer({ initialMinutes = 3, onStateChange }: TimerProps)
   };
 
 
-  const timerColor = timeLeft <= 10 ? "text-red-600" : "text-timer-fg";
+  const timerColor = timeLeft <= 10 ? "text-destructive" : "text-timer-fg";
 
   return (
     <div className="flex flex-col items-center space-y-4">
@@ -58,7 +59,7 @@ export default function Timer({ initialMinutes = 3, onStateChange }: TimerProps)
         
         <div className={`text-6xl font-mono font-bold transition-colors duration-300 ${
           isRunning 
-            ? (timerColor === "text-red-600" ? "text-red-600" : "text-primary") 
+            ? (timerColor === "text-destructive" ? "text-destructive" : "text-primary") 
             : timerColor
         }`}>
           {formatTime(timeLeft)}
