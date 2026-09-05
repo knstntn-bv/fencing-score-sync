@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
 
 # Native platform projects are generated locally with `npx cap add`
 android
