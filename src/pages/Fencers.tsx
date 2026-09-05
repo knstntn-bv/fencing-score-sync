@@ -170,9 +170,9 @@ function FencersShell({ children }: { children: ReactNode }) {
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <h1 className="text-3xl font-display font-bold text-primary flex items-center gap-2">
-              <Users className="h-7 w-7" />
+              <Users className="h-7 w-7 shrink-0" />
               Fencers
             </h1>
             <p className="text-muted-foreground">Club roster. Archive keeps bout history intact.</p>
