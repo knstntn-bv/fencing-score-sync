@@ -5,7 +5,7 @@ import type { WinnerSide } from "@/lib/boutOutcome";
 type SaveResultButtonProps = {
   anonymous: boolean;
   timerRunning: boolean;
-  winner: WinnerSide | null;
+  scoreLeader: WinnerSide | null;
   saved: boolean;
   saving: boolean;
   onSave: () => void;
@@ -14,7 +14,7 @@ type SaveResultButtonProps = {
 export default function SaveResultButton({
   anonymous,
   timerRunning,
-  winner,
+  scoreLeader,
   saved,
   saving,
   onSave,
@@ -24,7 +24,7 @@ export default function SaveResultButton({
     ? "Save result"
     : saved
       ? "Saved"
-      : winner
+      : scoreLeader
         ? "Save victory"
         : "Save draw";
 
@@ -36,13 +36,13 @@ export default function SaveResultButton({
       onClick={onSave}
       className="relative overflow-hidden min-w-[12rem]"
     >
-      {!anonymous && winner === 1 ? (
+      {!anonymous && scoreLeader === 1 ? (
         <span
           aria-hidden
           className="absolute left-0 top-0 bottom-0 w-2 bg-fencer-blue"
         />
       ) : null}
-      {!anonymous && winner === 2 ? (
+      {!anonymous && scoreLeader === 2 ? (
         <span
           aria-hidden
           className="absolute right-0 top-0 bottom-0 w-2 bg-fencer-red"

@@ -12,7 +12,7 @@ import { useKeepAwake } from "@/hooks/useKeepAwake";
 import { useFencers } from "@/hooks/useFencers";
 import { useAuth } from "@/context/AuthContext";
 import { boutSelectionMessage, resolveBoutSelection } from "@/lib/boutSelection";
-import { nextWinnerState } from "@/lib/boutOutcome";
+import { nextWinnerState, scoreLeader, scoreResults } from "@/lib/boutOutcome";
 import { fencerErrorMessage } from "@/lib/fencers";
 import { saveMatch } from "@/lib/matches";
 import type { Fencer } from "@/types/fencing";
@@ -97,9 +97,7 @@ const Index = ({ settings }: IndexProps) => {
 
     setSaving(true);
     try {
-      const winnerFencerId =
-        winner === 1 ? selection.blueId : winner === 2 ? selection.redId : null;
-      const winnerName = winner === 1 ? blueName : winner === 2 ? redName : null;
+      const { blueResult, redResult } = scoreResults(player1Score, player2Score);
       await saveMatch({
         clubId: user.id,
         blueFencerId: selection.blueId,
@@ -108,16 +106,15 @@ const Index = ({ settings }: IndexProps) => {
         redName,
         blueScore: player1Score,
         redScore: player2Score,
+        blueResult,
+        redResult,
         timeLimitSec: settings.timeLimit,
         pointsLimit: settings.pointsLimit,
         remainingSec,
-        winnerFencerId,
-        winnerName,
-        endedBy: winner ? "points" : "draw",
         startedAt: startedAt ?? new Date().toISOString(),
       });
       setSaved(true);
-      toast.success(winner ? "Victory saved" : "Draw saved");
+      toast.success(blueResult === "draw" ? "Draw saved" : "Victory saved");
     } catch (error) {
       toast.error(fencerErrorMessage(error, "Could not save the bout."));
     } finally {
@@ -206,7 +203,7 @@ const Index = ({ settings }: IndexProps) => {
           <SaveResultButton
             anonymous={!namedBout}
             timerRunning={isTimerRunning}
-            winner={winner}
+            scoreLeader={scoreLeader(player1Score, player2Score)}
             saved={saved}
             saving={saving}
             onSave={() => void handleSave()}

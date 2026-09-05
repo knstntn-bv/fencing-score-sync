@@ -1,5 +1,5 @@
 import type { Database } from "@/types/database";
-import type { Match, MatchEndedBy } from "@/types/fencing";
+import type { BoutResult, Match } from "@/types/fencing";
 import { requireSupabase } from "@/lib/supabase";
 
 type MatchInsert = Database["public"]["Tables"]["matches"]["Insert"];
@@ -13,12 +13,11 @@ export type SaveMatchInput = {
   redName: string;
   blueScore: number;
   redScore: number;
+  blueResult: BoutResult;
+  redResult: BoutResult;
   timeLimitSec: number;
   pointsLimit: number;
   remainingSec: number;
-  winnerFencerId: string | null;
-  winnerName: string | null;
-  endedBy: Exclude<MatchEndedBy, "time">;
   startedAt: string;
 };
 
@@ -32,12 +31,11 @@ export function mapMatch(row: MatchRow): Match {
     redName: row.red_name,
     blueScore: row.blue_score,
     redScore: row.red_score,
+    blueResult: row.blue_result,
+    redResult: row.red_result,
     timeLimitSec: row.time_limit_sec,
     pointsLimit: row.points_limit,
     remainingSec: row.remaining_sec,
-    winnerFencerId: row.winner_fencer_id,
-    winnerName: row.winner_name,
-    endedBy: row.ended_by,
     startedAt: row.started_at,
     finishedAt: row.finished_at,
     createdAt: row.created_at,
@@ -53,12 +51,11 @@ export async function saveMatch(input: SaveMatchInput): Promise<Match> {
     red_name: input.redName,
     blue_score: input.blueScore,
     red_score: input.redScore,
+    blue_result: input.blueResult,
+    red_result: input.redResult,
     time_limit_sec: input.timeLimitSec,
     points_limit: input.pointsLimit,
     remaining_sec: input.remainingSec,
-    winner_fencer_id: input.winnerFencerId,
-    winner_name: input.winnerName,
-    ended_by: input.endedBy,
     started_at: input.startedAt,
     finished_at: new Date().toISOString(),
   };
