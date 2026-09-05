@@ -1,11 +1,13 @@
 import type { Database } from "@/types/database";
 import type { BoutResult, Match } from "@/types/fencing";
+import { isDuplicateMatchError } from "@/lib/networkError";
 import { requireSupabase } from "@/lib/supabase";
 
 type MatchInsert = Database["public"]["Tables"]["matches"]["Insert"];
 type MatchRow = Database["public"]["Tables"]["matches"]["Row"];
 
 export type SaveMatchInput = {
+  id: string;
   clubId: string;
   blueFencerId: string;
   redFencerId: string;
@@ -19,7 +21,12 @@ export type SaveMatchInput = {
   pointsLimit: number;
   remainingSec: number;
   startedAt: string;
+  finishedAt: string;
 };
+
+export function newMatchId(): string {
+  return crypto.randomUUID();
+}
 
 export function mapMatch(row: MatchRow): Match {
   return {
@@ -71,6 +78,7 @@ export async function listMatches(): Promise<Match[]> {
 
 export async function saveMatch(input: SaveMatchInput): Promise<Match> {
   const payload: MatchInsert = {
+    id: input.id,
     club_id: input.clubId,
     blue_fencer_id: input.blueFencerId,
     red_fencer_id: input.redFencerId,
@@ -84,7 +92,7 @@ export async function saveMatch(input: SaveMatchInput): Promise<Match> {
     points_limit: input.pointsLimit,
     remaining_sec: input.remainingSec,
     started_at: input.startedAt,
-    finished_at: new Date().toISOString(),
+    finished_at: input.finishedAt,
   };
 
   const { data, error } = await requireSupabase()
@@ -93,6 +101,32 @@ export async function saveMatch(input: SaveMatchInput): Promise<Match> {
     .select("*")
     .single();
 
-  if (error) throw error;
+  if (error) {
+    if (isDuplicateMatchError(error)) {
+      return mapMatchFromInput(input);
+    }
+    throw error;
+  }
   return mapMatch(data);
+}
+
+export function mapMatchFromInput(input: SaveMatchInput): Match {
+  return {
+    id: input.id,
+    clubId: input.clubId,
+    blueFencerId: input.blueFencerId,
+    redFencerId: input.redFencerId,
+    blueName: input.blueName,
+    redName: input.redName,
+    blueScore: input.blueScore,
+    redScore: input.redScore,
+    blueResult: input.blueResult,
+    redResult: input.redResult,
+    timeLimitSec: input.timeLimitSec,
+    pointsLimit: input.pointsLimit,
+    remainingSec: input.remainingSec,
+    startedAt: input.startedAt,
+    finishedAt: input.finishedAt,
+    createdAt: input.finishedAt,
+  };
 }
