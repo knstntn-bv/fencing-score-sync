@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Settings, Users } from "lucide-react";
+import { History as HistoryIcon, Settings, Users } from "lucide-react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import ScoreDisplay from "@/components/ScoreDisplay";
 import Timer from "@/components/Timer";
@@ -14,6 +15,7 @@ import { useAuth } from "@/context/AuthContext";
 import { boutSelectionMessage, resolveBoutSelection } from "@/lib/boutSelection";
 import { nextWinnerState, scoreLeader, scoreResults } from "@/lib/boutOutcome";
 import { fencerErrorMessage } from "@/lib/fencers";
+import { MATCHES_QUERY_KEY } from "@/hooks/useMatches";
 import { saveMatch } from "@/lib/matches";
 import type { Fencer } from "@/types/fencing";
 
@@ -27,6 +29,7 @@ interface IndexProps {
 const Index = ({ settings }: IndexProps) => {
   const { user } = useAuth();
   const { active } = useFencers();
+  const queryClient = useQueryClient();
   const [player1Score, setPlayer1Score] = useState(0);
   const [player2Score, setPlayer2Score] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
@@ -113,6 +116,7 @@ const Index = ({ settings }: IndexProps) => {
         remainingSec,
         startedAt: startedAt ?? new Date().toISOString(),
       });
+      await queryClient.invalidateQueries({ queryKey: [...MATCHES_QUERY_KEY, user.id] });
       setSaved(true);
       toast.success(blueResult === "draw" ? "Draw saved" : "Victory saved");
     } catch (error) {
@@ -129,11 +133,16 @@ const Index = ({ settings }: IndexProps) => {
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-8 relative">
-          <div className="absolute right-0 top-0 flex gap-2">
+        <div className="mb-8">
+          <div className="flex justify-end gap-2 mb-3">
             <Link to="/fencers">
               <Button variant="outline" size="icon" aria-label="Fencers">
                 <Users className="h-4 w-4" />
+              </Button>
+            </Link>
+            <Link to="/history">
+              <Button variant="outline" size="icon" aria-label="History">
+                <HistoryIcon className="h-4 w-4" />
               </Button>
             </Link>
             <Link to="/settings">
@@ -142,7 +151,7 @@ const Index = ({ settings }: IndexProps) => {
               </Button>
             </Link>
           </div>
-          <h1 className="text-4xl font-display font-bold text-primary mb-2">
+          <h1 className="text-4xl font-display font-bold text-primary text-center">
             Fencing Scorer
           </h1>
         </div>
