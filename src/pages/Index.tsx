@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { History as HistoryIcon, Settings, Users } from "lucide-react";
+import { BarChart3, History as HistoryIcon, Settings, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -143,6 +143,11 @@ const Index = ({ settings }: IndexProps) => {
             <Link to="/history">
               <Button variant="outline" size="icon" aria-label="History">
                 <HistoryIcon className="h-4 w-4" />
+              </Button>
+            </Link>
+            <Link to="/stats">
+              <Button variant="outline" size="icon" aria-label="Stats">
+                <BarChart3 className="h-4 w-4" />
               </Button>
             </Link>
             <Link to="/settings">
