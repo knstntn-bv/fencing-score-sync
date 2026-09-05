@@ -8,6 +8,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import AuthGate from "@/components/AuthGate";
 import Index from "./pages/Index";
 import Settings from "./pages/Settings";
+import Fencers from "./pages/Fencers";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => {
             <AuthGate>
               <Routes>
                 <Route path="/" element={<Index settings={settings} />} />
+                <Route path="/fencers" element={<Fencers />} />
                 <Route path="/settings" element={<Settings settings={settings} onSave={setSettings} />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
