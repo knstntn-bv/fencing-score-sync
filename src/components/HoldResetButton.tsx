@@ -22,7 +22,7 @@ export default function HoldResetButton({ disabled, onReset }: HoldResetButtonPr
   };
 
   const startHold = () => {
-    if (disabled) return;
+    if (disabled || timeoutRef.current !== null) return;
     setHolding(true);
     timeoutRef.current = window.setTimeout(() => {
       timeoutRef.current = null;
@@ -41,6 +41,14 @@ export default function HoldResetButton({ disabled, onReset }: HoldResetButtonPr
       onPointerUp={cancelHold}
       onPointerLeave={cancelHold}
       onPointerCancel={cancelHold}
+      onMouseDown={startHold}
+      onMouseUp={cancelHold}
+      onMouseLeave={cancelHold}
+      onTouchStart={(event) => {
+        event.preventDefault();
+        startHold();
+      }}
+      onTouchEnd={cancelHold}
       onContextMenu={(event) => event.preventDefault()}
       className="relative overflow-hidden min-w-[12rem] select-none"
     >
