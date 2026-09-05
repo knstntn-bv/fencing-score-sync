@@ -1,5 +1,5 @@
 export type PisteSide = "blue" | "red";
-export type MatchEndedBy = "points" | "time";
+export type MatchEndedBy = "points" | "time" | "draw";
 
 export type Fencer = {
   id: string;

@@ -43,7 +43,7 @@ export type Database = {
           remaining_sec: number;
           winner_fencer_id: string | null;
           winner_name: string | null;
-          ended_by: "points" | "time";
+          ended_by: "points" | "time" | "draw";
           started_at: string;
           finished_at: string;
           created_at: string;
@@ -62,7 +62,7 @@ export type Database = {
           remaining_sec: number;
           winner_fencer_id?: string | null;
           winner_name?: string | null;
-          ended_by: "points" | "time";
+          ended_by: "points" | "time" | "draw";
           started_at: string;
           finished_at: string;
           created_at?: string;
@@ -81,7 +81,7 @@ export type Database = {
           remaining_sec?: number;
           winner_fencer_id?: string | null;
           winner_name?: string | null;
-          ended_by?: "points" | "time";
+          ended_by?: "points" | "time" | "draw";
           started_at?: string;
           finished_at?: string;
           created_at?: string;

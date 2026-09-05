@@ -1,14 +1,20 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Settings, Users } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import ScoreDisplay from "@/components/ScoreDisplay";
 import Timer from "@/components/Timer";
-import MatchControls from "@/components/MatchControls";
 import FencerPicker from "@/components/FencerPicker";
+import SaveResultButton from "@/components/SaveResultButton";
+import HoldResetButton from "@/components/HoldResetButton";
 import { useKeepAwake } from "@/hooks/useKeepAwake";
 import { useFencers } from "@/hooks/useFencers";
+import { useAuth } from "@/context/AuthContext";
 import { boutSelectionMessage, resolveBoutSelection } from "@/lib/boutSelection";
+import { nextWinnerState } from "@/lib/boutOutcome";
+import { fencerErrorMessage } from "@/lib/fencers";
+import { saveMatch } from "@/lib/matches";
 import type { Fencer } from "@/types/fencing";
 
 interface IndexProps {
@@ -19,69 +25,56 @@ interface IndexProps {
 }
 
 const Index = ({ settings }: IndexProps) => {
+  const { user } = useAuth();
   const { active } = useFencers();
   const [player1Score, setPlayer1Score] = useState(0);
   const [player2Score, setPlayer2Score] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [hasMatchStarted, setHasMatchStarted] = useState(false);
-  const [winner, setWinner] = useState<number | null>(null);
+  const [winner, setWinner] = useState<1 | 2 | null>(null);
   const [timerResetId, setTimerResetId] = useState(0);
+  const [remainingSec, setRemainingSec] = useState(settings.timeLimit);
+  const [startedAt, setStartedAt] = useState<string | null>(null);
   const [blueFencerId, setBlueFencerId] = useState<string | null>(null);
   const [redFencerId, setRedFencerId] = useState<string | null>(null);
   const [blueNameSnap, setBlueNameSnap] = useState<string | null>(null);
   const [redNameSnap, setRedNameSnap] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const selection = resolveBoutSelection(blueFencerId, redFencerId);
   const selectionHint = boutSelectionMessage(selection);
-  const canStart = selection.status === "ok";
+  const namedBout = selection.status === "ok" && selection.mode === "named";
+  const canStartTimer = selection.status === "ok" && !winner;
+  const namesLocked = hasMatchStarted || winner !== null;
 
-  const blueName = hasMatchStarted
-    ? (blueNameSnap ?? fencerName(active, blueFencerId, "Fencer 1"))
-    : fencerName(active, blueFencerId, "Fencer 1");
-  const redName = hasMatchStarted
-    ? (redNameSnap ?? fencerName(active, redFencerId, "Fencer 2"))
-    : fencerName(active, redFencerId, "Fencer 2");
+  const liveBlueName = fencerName(active, blueFencerId, "Fencer 1");
+  const liveRedName = fencerName(active, redFencerId, "Fencer 2");
+  const blueName = namesLocked ? (blueNameSnap ?? liveBlueName) : liveBlueName;
+  const redName = namesLocked ? (redNameSnap ?? liveRedName) : liveRedName;
 
-  const checkWinCondition = (p1Score: number, p2Score: number) => {
-    if (p1Score >= settings.pointsLimit && p2Score < settings.pointsLimit) {
-      setWinner(1);
-    } else if (p2Score >= settings.pointsLimit && p1Score < settings.pointsLimit) {
-      setWinner(2);
-    } else if (p1Score < settings.pointsLimit && p2Score < settings.pointsLimit) {
-      setWinner(null);
-    }
+  const applyScores = (blueScore: number, redScore: number) => {
+    setPlayer1Score(blueScore);
+    setPlayer2Score(redScore);
+    setWinner((current) => nextWinnerState(current, blueScore, redScore, settings.pointsLimit));
   };
 
-  const incrementPlayer1 = () => {
-    const newScore = player1Score + 1;
-    setPlayer1Score(newScore);
-    checkWinCondition(newScore, player2Score);
-  };
-  
-  const decrementPlayer1 = () => {
-    const newScore = Math.max(0, player1Score - 1);
-    setPlayer1Score(newScore);
-    checkWinCondition(newScore, player2Score);
-  };
-  
-  const incrementPlayer2 = () => {
-    const newScore = player2Score + 1;
-    setPlayer2Score(newScore);
-    checkWinCondition(player1Score, newScore);
-  };
-  
-  const decrementPlayer2 = () => {
-    const newScore = Math.max(0, player2Score - 1);
-    setPlayer2Score(newScore);
-    checkWinCondition(player1Score, newScore);
+  const incrementPlayer1 = () => applyScores(player1Score + 1, player2Score);
+  const decrementPlayer1 = () => applyScores(Math.max(0, player1Score - 1), player2Score);
+  const incrementPlayer2 = () => applyScores(player1Score, player2Score + 1);
+  const decrementPlayer2 = () => applyScores(player1Score, Math.max(0, player2Score - 1));
+
+  const snapshotNames = () => {
+    setBlueNameSnap(liveBlueName);
+    setRedNameSnap(liveRedName);
   };
 
   const handleTimerStateChange = (isRunning: boolean) => {
     setIsTimerRunning(isRunning);
     if (isRunning && !hasMatchStarted) {
       setHasMatchStarted(true);
-      setBlueNameSnap(fencerName(active, blueFencerId, "Fencer 1"));
-      setRedNameSnap(fencerName(active, redFencerId, "Fencer 2"));
+      snapshotNames();
+      setStartedAt(new Date().toISOString());
     }
   };
 
@@ -93,19 +86,52 @@ const Index = ({ settings }: IndexProps) => {
     setIsTimerRunning(false);
     setBlueNameSnap(null);
     setRedNameSnap(null);
+    setStartedAt(null);
+    setSaved(false);
     setTimerResetId((id) => id + 1);
   };
 
-  // Keep screen awake during matches
-  useKeepAwake(hasMatchStarted && !winner);
+  const handleSave = async () => {
+    if (!namedBout || selection.status !== "ok" || selection.mode !== "named") return;
+    if (!user || isTimerRunning || saved || saving) return;
 
-  const winnerLabel =
-    winner === 1 ? blueName : winner === 2 ? redName : null;
+    setSaving(true);
+    try {
+      const winnerFencerId =
+        winner === 1 ? selection.blueId : winner === 2 ? selection.redId : null;
+      const winnerName = winner === 1 ? blueName : winner === 2 ? redName : null;
+      await saveMatch({
+        clubId: user.id,
+        blueFencerId: selection.blueId,
+        redFencerId: selection.redId,
+        blueName,
+        redName,
+        blueScore: player1Score,
+        redScore: player2Score,
+        timeLimitSec: settings.timeLimit,
+        pointsLimit: settings.pointsLimit,
+        remainingSec,
+        winnerFencerId,
+        winnerName,
+        endedBy: winner ? "points" : "draw",
+        startedAt: startedAt ?? new Date().toISOString(),
+      });
+      setSaved(true);
+      toast.success(winner ? "Victory saved" : "Draw saved");
+    } catch (error) {
+      toast.error(fencerErrorMessage(error, "Could not save the bout."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  useKeepAwake(isTimerRunning || (hasMatchStarted && !saved));
+
+  const winnerLabel = winner === 1 ? blueName : winner === 2 ? redName : null;
 
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
         <div className="text-center mb-8 relative">
           <div className="absolute right-0 top-0 flex gap-2">
             <Link to="/fencers">
@@ -124,7 +150,6 @@ const Index = ({ settings }: IndexProps) => {
           </h1>
         </div>
 
-        {/* Score Displays */}
         <div className="grid grid-cols-2 gap-4 md:gap-8 max-w-4xl mx-auto mb-8">
           <ScoreDisplay
             playerName={blueName}
@@ -133,7 +158,7 @@ const Index = ({ settings }: IndexProps) => {
                 fencers={active}
                 value={blueFencerId}
                 excludeId={redFencerId}
-                disabled={hasMatchStarted}
+                disabled={namesLocked}
                 placeholder="Anonymous"
                 lockedName={blueName}
                 onChange={setBlueFencerId}
@@ -142,10 +167,10 @@ const Index = ({ settings }: IndexProps) => {
             score={player1Score}
             onIncrement={incrementPlayer1}
             onDecrement={decrementPlayer1}
-            disabled={isTimerRunning || winner !== null}
+            disabled={isTimerRunning}
             colorScheme="blue"
           />
-          
+
           <ScoreDisplay
             playerName={redName}
             nameControl={
@@ -153,7 +178,7 @@ const Index = ({ settings }: IndexProps) => {
                 fencers={active}
                 value={redFencerId}
                 excludeId={blueFencerId}
-                disabled={hasMatchStarted}
+                disabled={namesLocked}
                 placeholder="Anonymous"
                 lockedName={redName}
                 onChange={setRedFencerId}
@@ -162,32 +187,40 @@ const Index = ({ settings }: IndexProps) => {
             score={player2Score}
             onIncrement={incrementPlayer2}
             onDecrement={decrementPlayer2}
-            disabled={isTimerRunning || winner !== null}
+            disabled={isTimerRunning}
             colorScheme="red"
           />
         </div>
 
-        {/* Timer */}
         <div className="flex justify-center mb-4">
           <Timer
             key={`timer-${timerResetId}-${settings.timeLimit}`}
-            initialMinutes={settings.timeLimit / 60} 
-            canStart={canStart}
+            initialMinutes={settings.timeLimit / 60}
+            canStart={canStartTimer}
             onStateChange={handleTimerStateChange}
+            onRemainingChange={setRemainingSec}
           />
         </div>
 
-        {/* Match Controls */}
-        <MatchControls onReset={handleReset} />
+        <div className="flex flex-col sm:flex-row justify-center items-center gap-3 mt-4">
+          <SaveResultButton
+            anonymous={!namedBout}
+            timerRunning={isTimerRunning}
+            winner={winner}
+            saved={saved}
+            saving={saving}
+            onSave={() => void handleSave()}
+          />
+          <HoldResetButton disabled={isTimerRunning} onReset={handleReset} />
+        </div>
 
-        {/* Match Status */}
         <div className="text-center mt-4 space-y-1">
           {selectionHint ? (
             <div className="text-sm text-destructive">{selectionHint}</div>
           ) : null}
           <div className="text-sm text-muted-foreground">
             {winnerLabel
-              ? `${winnerLabel} won!`
+              ? `${winnerLabel} won — timer stays paused`
               : `First to ${settings.pointsLimit} points wins`}
           </div>
         </div>
