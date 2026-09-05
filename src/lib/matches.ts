@@ -42,6 +42,33 @@ export function mapMatch(row: MatchRow): Match {
   };
 }
 
+export function listHistoryPeople(matches: Match[]): { id: string; name: string }[] {
+  const names = new Map<string, string>();
+  for (const match of matches) {
+    if (!names.has(match.blueFencerId)) names.set(match.blueFencerId, match.blueName);
+    if (!names.has(match.redFencerId)) names.set(match.redFencerId, match.redName);
+  }
+  return [...names.entries()]
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+}
+
+export function matchOutcomeLabel(match: Match): string {
+  if (match.blueResult === "draw") return "Draw";
+  if (match.blueResult === "win") return `${match.blueName} won`;
+  return `${match.redName} won`;
+}
+
+export async function listMatches(): Promise<Match[]> {
+  const { data, error } = await requireSupabase()
+    .from("matches")
+    .select("*")
+    .order("finished_at", { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []).map(mapMatch);
+}
+
 export async function saveMatch(input: SaveMatchInput): Promise<Match> {
   const payload: MatchInsert = {
     club_id: input.clubId,
