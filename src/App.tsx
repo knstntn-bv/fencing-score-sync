@@ -21,7 +21,7 @@ const App = () => {
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
+        <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <Routes>
             <Route path="/" element={<Index settings={settings} />} />
             <Route path="/settings" element={<Settings settings={settings} onSave={setSettings} />} />
