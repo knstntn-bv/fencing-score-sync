@@ -1,12 +1,25 @@
-import type { CapacitorConfig } from '@capacitor/cli';
+import type { CapacitorConfig } from "@capacitor/cli";
+
+/**
+ * Native apps load the Vite production bundle from `webDir`.
+ *
+ * Do not commit `server.url`: that makes the WebView load a remote site
+ * instead of the packaged assets (Lovable used this for live preview).
+ *
+ * For device live-reload only, set CAPACITOR_LIVE_RELOAD_URL to your
+ * machine's LAN address (e.g. http://192.168.1.10:8080) before `cap sync`.
+ */
+const liveReloadUrl = process.env.CAPACITOR_LIVE_RELOAD_URL;
 
 const config: CapacitorConfig = {
-  appId: 'app.lovable.d1df035b812845be9ffb36f88a5ffd3b',
-  appName: 'fencing-score-sync',
-  webDir: 'dist',
+  appId: "app.lovable.d1df035b812845be9ffb36f88a5ffd3b",
+  appName: "fencing-score-sync",
+  webDir: "dist",
   server: {
-    url: "https://d1df035b-8128-45be-9ffb-36f88a5ffd3b.lovableproject.com?forceHideBadge=true",
-    cleartext: true
+    androidScheme: "https",
+    ...(liveReloadUrl
+      ? { url: liveReloadUrl, cleartext: true }
+      : {}),
   },
 };
 
