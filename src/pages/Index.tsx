@@ -133,8 +133,8 @@ const Index = ({ settings }: IndexProps) => {
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-8 relative">
-          <div className="absolute right-0 top-0 flex gap-2">
+        <div className="mb-8">
+          <div className="flex justify-end gap-2 mb-3">
             <Link to="/fencers">
               <Button variant="outline" size="icon" aria-label="Fencers">
                 <Users className="h-4 w-4" />
@@ -151,7 +151,7 @@ const Index = ({ settings }: IndexProps) => {
               </Button>
             </Link>
           </div>
-          <h1 className="text-4xl font-display font-bold text-primary mb-2">
+          <h1 className="text-4xl font-display font-bold text-primary text-center">
             Fencing Scorer
           </h1>
         </div>
