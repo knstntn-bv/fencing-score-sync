@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Native platform projects are generated locally with `npx cap add`
+android
+ios
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

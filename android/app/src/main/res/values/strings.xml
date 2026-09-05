@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">fencing-score-sync</string>
-    <string name="title_activity_main">fencing-score-sync</string>
-    <string name="package_name">app.lovable.d1df035b812845be9ffb36f88a5ffd3b</string>
-    <string name="custom_url_scheme">app.lovable.d1df035b812845be9ffb36f88a5ffd3b</string>
-</resources>
