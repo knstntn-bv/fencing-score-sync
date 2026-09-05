@@ -30,7 +30,8 @@ interface IndexProps {
 }
 
 const Index = ({ settings }: IndexProps) => {
-  const { user } = useAuth();
+  const { user, guestBout, exitGuestBout } = useAuth();
+  const guestScoreboard = guestBout && !user;
   const { active } = useFencers();
   const queryClient = useQueryClient();
   const pendingUploads = useMatchOutboxCount(user?.id);
@@ -51,7 +52,7 @@ const Index = ({ settings }: IndexProps) => {
 
   const selection = resolveBoutSelection(blueFencerId, redFencerId);
   const selectionHint = boutSelectionMessage(selection);
-  const namedBout = selection.status === "ok" && selection.mode === "named";
+  const namedBout = !guestScoreboard && selection.status === "ok" && selection.mode === "named";
   const canStartTimer = selection.status === "ok" && !winner;
   const namesLocked = hasMatchStarted || winner !== null;
 
@@ -154,21 +155,29 @@ const Index = ({ settings }: IndexProps) => {
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <div className="flex justify-end gap-2 mb-3">
-            <Link to="/fencers">
-              <Button variant="outline" size="icon" aria-label="Fencers">
-                <Users className="h-4 w-4" />
+            {guestScoreboard ? (
+              <Button variant="outline" onClick={() => exitGuestBout()}>
+                Sign in
               </Button>
-            </Link>
-            <Link to="/history">
-              <Button variant="outline" size="icon" aria-label="History">
-                <HistoryIcon className="h-4 w-4" />
-              </Button>
-            </Link>
-            <Link to="/stats">
-              <Button variant="outline" size="icon" aria-label="Stats">
-                <BarChart3 className="h-4 w-4" />
-              </Button>
-            </Link>
+            ) : (
+              <>
+                <Link to="/fencers">
+                  <Button variant="outline" size="icon" aria-label="Fencers">
+                    <Users className="h-4 w-4" />
+                  </Button>
+                </Link>
+                <Link to="/history">
+                  <Button variant="outline" size="icon" aria-label="History">
+                    <HistoryIcon className="h-4 w-4" />
+                  </Button>
+                </Link>
+                <Link to="/stats">
+                  <Button variant="outline" size="icon" aria-label="Stats">
+                    <BarChart3 className="h-4 w-4" />
+                  </Button>
+                </Link>
+              </>
+            )}
             <Link to="/settings">
               <Button variant="outline" size="icon" aria-label="Settings">
                 <Settings className="h-4 w-4" />
@@ -184,15 +193,17 @@ const Index = ({ settings }: IndexProps) => {
           <ScoreDisplay
             playerName={blueName}
             nameControl={
-              <FencerPicker
-                fencers={active}
-                value={blueFencerId}
-                excludeId={redFencerId}
-                disabled={namesLocked}
-                placeholder="Anonymous"
-                lockedName={blueName}
-                onChange={setBlueFencerId}
-              />
+              guestScoreboard ? undefined : (
+                <FencerPicker
+                  fencers={active}
+                  value={blueFencerId}
+                  excludeId={redFencerId}
+                  disabled={namesLocked}
+                  placeholder="Anonymous"
+                  lockedName={blueName}
+                  onChange={setBlueFencerId}
+                />
+              )
             }
             score={player1Score}
             onIncrement={incrementPlayer1}
@@ -204,15 +215,17 @@ const Index = ({ settings }: IndexProps) => {
           <ScoreDisplay
             playerName={redName}
             nameControl={
-              <FencerPicker
-                fencers={active}
-                value={redFencerId}
-                excludeId={blueFencerId}
-                disabled={namesLocked}
-                placeholder="Anonymous"
-                lockedName={redName}
-                onChange={setRedFencerId}
-              />
+              guestScoreboard ? undefined : (
+                <FencerPicker
+                  fencers={active}
+                  value={redFencerId}
+                  excludeId={blueFencerId}
+                  disabled={namesLocked}
+                  placeholder="Anonymous"
+                  lockedName={redName}
+                  onChange={setRedFencerId}
+                />
+              )
             }
             score={player2Score}
             onIncrement={incrementPlayer2}
@@ -233,19 +246,25 @@ const Index = ({ settings }: IndexProps) => {
         </div>
 
         <div className="flex flex-col sm:flex-row justify-center items-center gap-3 mt-4">
-          <SaveResultButton
-            anonymous={!namedBout}
-            timerRunning={isTimerRunning}
-            scoreLeader={scoreLeader(player1Score, player2Score)}
-            saved={saved}
-            saving={saving}
-            onSave={() => void handleSave()}
-          />
+          {guestScoreboard ? null : (
+            <SaveResultButton
+              anonymous={!namedBout}
+              timerRunning={isTimerRunning}
+              scoreLeader={scoreLeader(player1Score, player2Score)}
+              saved={saved}
+              saving={saving}
+              onSave={() => void handleSave()}
+            />
+          )}
           <HoldResetButton disabled={isTimerRunning} onReset={handleReset} />
         </div>
 
         <div className="text-center mt-4 space-y-1">
-          {selectionHint ? (
+          {guestScoreboard ? (
+            <div className="text-sm text-muted-foreground">
+              Quick bout — results are not saved.
+            </div>
+          ) : selectionHint ? (
             <div className="text-sm text-destructive">{selectionHint}</div>
           ) : null}
           <div className="text-sm text-muted-foreground">
@@ -253,13 +272,13 @@ const Index = ({ settings }: IndexProps) => {
               ? `${winnerLabel} won — timer stays paused`
               : `First to ${settings.pointsLimit} points wins`}
           </div>
-          {pendingUploads > 0 ? (
+          {guestScoreboard || pendingUploads === 0 ? null : (
             <div className="text-sm text-muted-foreground">
               {pendingUploads === 1
                 ? "1 bout will upload when you're online."
                 : `${pendingUploads} bouts will upload when you're online.`}
             </div>
-          ) : null}
+          )}
         </div>
       </div>
     </div>

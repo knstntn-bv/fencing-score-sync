@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, BarChart3, History as HistoryIcon, LogOut, Save, Users } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import type { ClubSettings } from "@/lib/settings";
@@ -15,7 +15,9 @@ interface SettingsProps {
 }
 
 const Settings = ({ settings, onSave }: SettingsProps) => {
-  const { configured, user, signOut } = useAuth();
+  const { configured, user, guestBout, signOut, exitGuestBout } = useAuth();
+  const navigate = useNavigate();
+  const guestScoreboard = guestBout && !user;
   const [timeLimit, setTimeLimit] = useState(settings.timeLimit);
   const [pointsLimit, setPointsLimit] = useState(settings.pointsLimit);
 
@@ -39,10 +41,21 @@ const Settings = ({ settings, onSave }: SettingsProps) => {
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <Link to="/">
-            <Button variant="outline" size="icon">
+            <Button variant="outline" size="icon" aria-label="Back to scoreboard">
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
+          {guestScoreboard ? (
+            <Button
+              variant="outline"
+              onClick={() => {
+                exitGuestBout();
+                navigate("/");
+              }}
+            >
+              Sign in
+            </Button>
+          ) : null}
           <div>
             <h1 className="text-3xl font-display font-bold text-primary">
               Tournament Settings

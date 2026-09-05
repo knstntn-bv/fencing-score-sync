@@ -3,7 +3,7 @@ import { useAuth } from "@/context/AuthContext";
 import Login from "@/pages/Login";
 
 export default function AuthGate({ children }: { children: ReactNode }) {
-  const { configured, loading, user } = useAuth();
+  const { configured, loading, user, guestBout } = useAuth();
 
   if (loading) {
     return (
@@ -13,7 +13,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (configured && !user) {
+  if (configured && !user && !guestBout) {
     return <Login />;
   }
 
