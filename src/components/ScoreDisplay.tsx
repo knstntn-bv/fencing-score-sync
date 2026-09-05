@@ -1,9 +1,11 @@
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Plus, Minus } from "lucide-react";
 
 interface ScoreDisplayProps {
   playerName: string;
+  nameControl?: ReactNode;
   score: number;
   onIncrement: () => void;
   onDecrement: () => void;
@@ -11,14 +13,24 @@ interface ScoreDisplayProps {
   colorScheme: "blue" | "red";
 }
 
-export default function ScoreDisplay({ playerName, score, onIncrement, onDecrement, disabled = false, colorScheme }: ScoreDisplayProps) {
+export default function ScoreDisplay({
+  playerName,
+  nameControl,
+  score,
+  onIncrement,
+  onDecrement,
+  disabled = false,
+  colorScheme,
+}: ScoreDisplayProps) {
   const bgColor = colorScheme === "blue" ? "bg-fencer-blue-bg" : "bg-fencer-red-bg";
   const accentColor = colorScheme === "blue" ? "border-fencer-blue" : "border-fencer-red";
   return (
     <Card className={`${bgColor} ${accentColor} border-2 p-8 flex flex-col items-center space-y-6 min-h-[300px] justify-center`}>
-      <h2 className="text-xl font-display font-semibold text-fencer-foreground text-center">
-        {playerName}
-      </h2>
+      {nameControl ?? (
+        <h2 className="text-xl font-display font-semibold text-fencer-foreground text-center">
+          {playerName}
+        </h2>
+      )}
       
       <div className="text-8xl font-mono font-bold text-fencer-foreground animate-pulse-score">
         {score}
