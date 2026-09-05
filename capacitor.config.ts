@@ -12,7 +12,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 const liveReloadUrl = process.env.CAPACITOR_LIVE_RELOAD_URL;
 
 const config: CapacitorConfig = {
-  appId: "app.lovable.d1df035b812845be9ffb36f88a5ffd3b",
+  appId: "app.konbo.d1df035b813845be9ffb36f88a5ffd3b",
   appName: "fencing-score-sync",
   webDir: "dist",
   server: {
