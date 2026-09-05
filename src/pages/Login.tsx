@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -6,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/context/AuthContext";
 
 export default function Login() {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, enterGuestBout } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState<"in" | "up" | null>(null);
@@ -88,6 +90,30 @@ export default function Login() {
             >
               {busy === "up" ? "Creating…" : "Create club account"}
             </Button>
+            <div className="relative py-2">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-border" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground">or</span>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full"
+              size="lg"
+              disabled={busy !== null}
+              onClick={() => {
+                enterGuestBout();
+                navigate("/");
+              }}
+            >
+              Quick bout
+            </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              Timer and scores only. No fencer list and no saved results.
+            </p>
           </form>
         </CardContent>
       </Card>

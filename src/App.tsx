@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import AuthGate from "@/components/AuthGate";
+import ClubRoute from "@/components/ClubRoute";
 import { useMatchOutboxFlush } from "@/hooks/useMatchOutbox";
 import { readSettings, writeSettings, type ClubSettings } from "@/lib/settings";
 import Index from "./pages/Index";
@@ -40,9 +41,30 @@ const App = () => {
             <AuthGate>
               <Routes>
                 <Route path="/" element={<Index settings={settings} />} />
-                <Route path="/fencers" element={<Fencers />} />
-                <Route path="/history" element={<History />} />
-                <Route path="/stats" element={<Stats />} />
+                <Route
+                  path="/fencers"
+                  element={
+                    <ClubRoute>
+                      <Fencers />
+                    </ClubRoute>
+                  }
+                />
+                <Route
+                  path="/history"
+                  element={
+                    <ClubRoute>
+                      <History />
+                    </ClubRoute>
+                  }
+                />
+                <Route
+                  path="/stats"
+                  element={
+                    <ClubRoute>
+                      <Stats />
+                    </ClubRoute>
+                  }
+                />
                 <Route path="/settings" element={<Settings settings={settings} onSave={saveSettings} />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
