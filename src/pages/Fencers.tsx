@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Archive, ArrowLeft, Check, Pencil, RotateCcw, UserPlus, Users, X } from "lucide-react";
+import { Archive, ArrowLeft, BarChart3, Check, Pencil, RotateCcw, UserPlus, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -170,13 +170,18 @@ function FencersShell({ children }: { children: ReactNode }) {
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
-          <div>
+          <div className="flex-1">
             <h1 className="text-3xl font-display font-bold text-primary flex items-center gap-2">
               <Users className="h-7 w-7" />
               Fencers
             </h1>
             <p className="text-muted-foreground">Club roster. Archive keeps bout history intact.</p>
           </div>
+          <Link to="/stats">
+            <Button variant="outline" size="icon" aria-label="Stats">
+              <BarChart3 className="h-4 w-4" />
+            </Button>
+          </Link>
         </div>
         {children}
       </div>

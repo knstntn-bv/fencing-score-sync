@@ -10,6 +10,7 @@ import Index from "./pages/Index";
 import Settings from "./pages/Settings";
 import Fencers from "./pages/Fencers";
 import History from "./pages/History";
+import Stats from "./pages/Stats";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => {
                 <Route path="/" element={<Index settings={settings} />} />
                 <Route path="/fencers" element={<Fencers />} />
                 <Route path="/history" element={<History />} />
+                <Route path="/stats" element={<Stats />} />
                 <Route path="/settings" element={<Settings settings={settings} onSave={setSettings} />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
