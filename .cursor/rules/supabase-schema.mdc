@@ -1,0 +1,16 @@
+---
+description: Keep the Supabase snapshot schema in sync with incremental migrations
+globs: supabase/**
+alwaysApply: false
+---
+
+# Supabase schema files
+
+- `supabase/final_schema.sql` is the full current schema (empty project).
+- `supabase/migrations/` holds deltas for projects that already applied older SQL.
+
+When changing the database:
+
+1. Add `supabase/migrations/YYYYMMDDHHMMSS_short_name.sql` from the current live schema.
+2. Update `supabase/final_schema.sql` so a blank database still matches.
+3. Do not rewrite migration files that have already been applied.

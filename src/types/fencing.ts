@@ -1,5 +1,5 @@
 export type PisteSide = "blue" | "red";
-export type MatchEndedBy = "points" | "time";
+export type BoutResult = "win" | "lose" | "draw";
 
 export type Fencer = {
   id: string;
@@ -19,12 +19,11 @@ export type Match = {
   redName: string;
   blueScore: number;
   redScore: number;
+  blueResult: BoutResult;
+  redResult: BoutResult;
   timeLimitSec: number;
   pointsLimit: number;
   remainingSec: number;
-  winnerFencerId: string | null;
-  winnerName: string | null;
-  endedBy: MatchEndedBy;
   startedAt: string;
   finishedAt: string;
   createdAt: string;

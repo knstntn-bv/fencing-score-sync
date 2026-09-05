@@ -7,15 +7,21 @@ interface TimerProps {
   initialMinutes?: number;
   canStart?: boolean;
   onStateChange?: (isRunning: boolean) => void;
+  onRemainingChange?: (seconds: number) => void;
 }
 
 export default function Timer({
   initialMinutes = 3,
   canStart = true,
   onStateChange,
+  onRemainingChange,
 }: TimerProps) {
   const [timeLeft, setTimeLeft] = useState(initialMinutes * 60);
   const [isRunning, setIsRunning] = useState(false);
+
+  useEffect(() => {
+    onRemainingChange?.(timeLeft);
+  }, [timeLeft]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
