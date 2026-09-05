@@ -3,8 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, LogOut, Save } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
 
 interface SettingsData {
   timeLimit: number; // in seconds
@@ -17,6 +18,7 @@ interface SettingsProps {
 }
 
 const Settings = ({ settings, onSave }: SettingsProps) => {
+  const { configured, user, signOut } = useAuth();
   const [timeLimit, setTimeLimit] = useState(settings.timeLimit);
   const [pointsLimit, setPointsLimit] = useState(settings.pointsLimit);
 
@@ -115,6 +117,23 @@ const Settings = ({ settings, onSave }: SettingsProps) => {
             <Save className="h-4 w-4 mr-2" />
             Save Settings
           </Button>
+
+          {configured && user ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Club account</CardTitle>
+                <CardDescription>
+                  Signed in as {user.email}. Fencers and bout history belong to this account.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button variant="outline" className="w-full" onClick={() => void signOut()}>
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign out
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
         </div>
       </div>
     </div>
