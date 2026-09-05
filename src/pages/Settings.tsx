@@ -5,16 +5,13 @@ import { Slider } from "@/components/ui/slider";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, BarChart3, History as HistoryIcon, LogOut, Save, Users } from "lucide-react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
-
-interface SettingsData {
-  timeLimit: number; // in seconds
-  pointsLimit: number;
-}
+import type { ClubSettings } from "@/lib/settings";
 
 interface SettingsProps {
-  settings: SettingsData;
-  onSave: (settings: SettingsData) => void;
+  settings: ClubSettings;
+  onSave: (settings: ClubSettings) => void;
 }
 
 const Settings = ({ settings, onSave }: SettingsProps) => {
@@ -33,6 +30,7 @@ const Settings = ({ settings, onSave }: SettingsProps) => {
 
   const handleSave = () => {
     onSave({ timeLimit, pointsLimit });
+    toast.success("Settings saved on this device");
   };
 
   return (
@@ -50,7 +48,7 @@ const Settings = ({ settings, onSave }: SettingsProps) => {
               Tournament Settings
             </h1>
             <p className="text-muted-foreground">
-              Configure match parameters
+              Limits stay on this device after reload.
             </p>
           </div>
         </div>

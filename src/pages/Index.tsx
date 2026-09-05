@@ -16,7 +16,10 @@ import { boutSelectionMessage, resolveBoutSelection } from "@/lib/boutSelection"
 import { nextWinnerState, scoreLeader, scoreResults } from "@/lib/boutOutcome";
 import { fencerErrorMessage } from "@/lib/fencers";
 import { MATCHES_QUERY_KEY } from "@/hooks/useMatches";
-import { saveMatch } from "@/lib/matches";
+import { useMatchOutboxCount } from "@/hooks/useMatchOutbox";
+import { enqueueMatchOutbox } from "@/lib/matchOutbox";
+import { newMatchId, saveMatch } from "@/lib/matches";
+import { isNetworkError } from "@/lib/networkError";
 import type { Fencer } from "@/types/fencing";
 
 interface IndexProps {
@@ -30,6 +33,7 @@ const Index = ({ settings }: IndexProps) => {
   const { user } = useAuth();
   const { active } = useFencers();
   const queryClient = useQueryClient();
+  const pendingUploads = useMatchOutboxCount(user?.id);
   const [player1Score, setPlayer1Score] = useState(0);
   const [player2Score, setPlayer2Score] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
@@ -99,27 +103,42 @@ const Index = ({ settings }: IndexProps) => {
     if (!user || isTimerRunning || saved || saving) return;
 
     setSaving(true);
+    const { blueResult, redResult } = scoreResults(player1Score, player2Score);
+    const payload = {
+      id: newMatchId(),
+      clubId: user.id,
+      blueFencerId: selection.blueId,
+      redFencerId: selection.redId,
+      blueName,
+      redName,
+      blueScore: player1Score,
+      redScore: player2Score,
+      blueResult,
+      redResult,
+      timeLimitSec: settings.timeLimit,
+      pointsLimit: settings.pointsLimit,
+      remainingSec,
+      startedAt: startedAt ?? new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+    };
     try {
-      const { blueResult, redResult } = scoreResults(player1Score, player2Score);
-      await saveMatch({
-        clubId: user.id,
-        blueFencerId: selection.blueId,
-        redFencerId: selection.redId,
-        blueName,
-        redName,
-        blueScore: player1Score,
-        redScore: player2Score,
-        blueResult,
-        redResult,
-        timeLimitSec: settings.timeLimit,
-        pointsLimit: settings.pointsLimit,
-        remainingSec,
-        startedAt: startedAt ?? new Date().toISOString(),
-      });
+      if (!navigator.onLine) {
+        enqueueMatchOutbox(user.id, payload);
+        setSaved(true);
+        toast.message("Saved on this device. Will upload when you're online.");
+        return;
+      }
+      await saveMatch(payload);
       await queryClient.invalidateQueries({ queryKey: [...MATCHES_QUERY_KEY, user.id] });
       setSaved(true);
       toast.success(blueResult === "draw" ? "Draw saved" : "Victory saved");
     } catch (error) {
+      if (isNetworkError(error)) {
+        enqueueMatchOutbox(user.id, payload);
+        setSaved(true);
+        toast.message("Saved on this device. Will upload when you're online.");
+        return;
+      }
       toast.error(fencerErrorMessage(error, "Could not save the bout."));
     } finally {
       setSaving(false);
@@ -234,6 +253,13 @@ const Index = ({ settings }: IndexProps) => {
               ? `${winnerLabel} won — timer stays paused`
               : `First to ${settings.pointsLimit} points wins`}
           </div>
+          {pendingUploads > 0 ? (
+            <div className="text-sm text-muted-foreground">
+              {pendingUploads === 1
+                ? "1 bout will upload when you're online."
+                : `${pendingUploads} bouts will upload when you're online.`}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
