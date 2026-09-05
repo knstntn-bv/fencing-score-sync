@@ -5,10 +5,15 @@ import { Play, Pause } from "lucide-react";
 
 interface TimerProps {
   initialMinutes?: number;
+  canStart?: boolean;
   onStateChange?: (isRunning: boolean) => void;
 }
 
-export default function Timer({ initialMinutes = 3, onStateChange }: TimerProps) {
+export default function Timer({
+  initialMinutes = 3,
+  canStart = true,
+  onStateChange,
+}: TimerProps) {
   const [timeLeft, setTimeLeft] = useState(initialMinutes * 60);
   const [isRunning, setIsRunning] = useState(false);
 
@@ -36,6 +41,7 @@ export default function Timer({ initialMinutes = 3, onStateChange }: TimerProps)
   };
 
   const handleStart = () => {
+    if (!isRunning && !canStart) return;
     const newRunningState = !isRunning;
     setIsRunning(newRunningState);
     onStateChange?.(newRunningState);
@@ -69,6 +75,7 @@ export default function Timer({ initialMinutes = 3, onStateChange }: TimerProps)
           variant={isRunning ? "default" : "timer"}
           size="lg"
           onClick={handleStart}
+          disabled={!isRunning && !canStart}
           className={`flex items-center space-x-2 h-12 px-6 transition-all duration-300 ${
             isRunning ? 'bg-primary hover:bg-primary/90 text-primary-foreground' : ''
           }`}
