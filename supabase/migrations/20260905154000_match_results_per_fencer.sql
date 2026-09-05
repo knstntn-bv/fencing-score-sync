@@ -1,4 +1,5 @@
 -- Result is per fencer from the scoreline. How the clock stopped does not matter.
+-- After applying, supabase/final_schema.sql must match this end state.
 
 alter table public.matches drop constraint if exists matches_winner_consistency;
 alter table public.matches drop constraint if exists matches_ended_by_check;
