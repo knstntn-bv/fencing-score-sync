@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Settings } from "lucide-react";
+import { Settings, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ScoreDisplay from "@/components/ScoreDisplay";
 import Timer from "@/components/Timer";
@@ -81,11 +81,18 @@ const Index = ({ settings }: IndexProps) => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8 relative">
-          <Link to="/settings" className="absolute right-0 top-0">
-            <Button variant="outline" size="icon">
-              <Settings className="h-4 w-4" />
-            </Button>
-          </Link>
+          <div className="absolute right-0 top-0 flex gap-2">
+            <Link to="/fencers">
+              <Button variant="outline" size="icon" aria-label="Fencers">
+                <Users className="h-4 w-4" />
+              </Button>
+            </Link>
+            <Link to="/settings">
+              <Button variant="outline" size="icon" aria-label="Settings">
+                <Settings className="h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
           <h1 className="text-4xl font-display font-bold text-primary mb-2">
             Fencing Scorer
           </h1>
