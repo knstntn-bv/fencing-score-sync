@@ -60,10 +60,11 @@ export function writeFencerCache(clubId: string, fencers: Fencer[]): void {
   }
 }
 
-export async function listFencers(): Promise<Fencer[]> {
+export async function listFencers(clubId: string): Promise<Fencer[]> {
   const { data, error } = await requireSupabase()
     .from("fencers")
     .select("*")
+    .eq("club_id", clubId)
     .order("name", { ascending: true });
 
   if (error) throw error;

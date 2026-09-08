@@ -66,10 +66,11 @@ export function matchOutcomeLabel(match: Match): string {
   return `${match.redName} won`;
 }
 
-export async function listMatches(): Promise<Match[]> {
+export async function listMatches(clubId: string): Promise<Match[]> {
   const { data, error } = await requireSupabase()
     .from("matches")
     .select("*")
+    .eq("club_id", clubId)
     .order("finished_at", { ascending: false });
 
   if (error) throw error;

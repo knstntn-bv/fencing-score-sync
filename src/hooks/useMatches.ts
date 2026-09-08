@@ -6,14 +6,16 @@ import { listMatches } from "@/lib/matches";
 export const MATCHES_QUERY_KEY = ["matches"] as const;
 
 export function useMatches() {
-  const { user, configured } = useAuth();
-  const clubId = user?.id;
+  const { clubId, configured } = useAuth();
   const enabled = configured && Boolean(clubId);
 
   const query = useQuery({
     queryKey: [...MATCHES_QUERY_KEY, clubId],
     enabled,
-    queryFn: listMatches,
+    queryFn: () => {
+      if (!clubId) throw new Error("Not signed in.");
+      return listMatches(clubId);
+    },
   });
 
   return {

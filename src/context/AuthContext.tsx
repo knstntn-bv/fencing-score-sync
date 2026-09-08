@@ -4,10 +4,12 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
+import { resolveCurrentClubId } from "@/lib/clubs";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 const GUEST_BOUT_KEY = "fencing-scorer:v1:guest-bout";
@@ -34,6 +36,9 @@ type AuthContextValue = {
   loading: boolean;
   session: Session | null;
   user: User | null;
+  clubId: string | null;
+  clubError: string | null;
+  retryClub: () => void;
   guestBout: boolean;
   enterGuestBout: () => void;
   exitGuestBout: () => void;
@@ -45,9 +50,14 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [loading, setLoading] = useState(isSupabaseConfigured);
+  const [sessionLoading, setSessionLoading] = useState(isSupabaseConfigured);
   const [session, setSession] = useState<Session | null>(null);
+  const [clubId, setClubId] = useState<string | null>(null);
+  const [clubLoading, setClubLoading] = useState(false);
+  const [clubError, setClubError] = useState<string | null>(null);
+  const [clubEpoch, setClubEpoch] = useState(0);
   const [guestBout, setGuestBout] = useState(readGuestBout);
+  const userIdRef = useRef<string | null>(null);
 
   const enterGuestBout = useCallback(() => {
     writeGuestBout(true);
@@ -59,9 +69,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setGuestBout(false);
   }, []);
 
+  const applySession = useCallback((nextSession: Session | null) => {
+    const nextUserId = nextSession?.user?.id ?? null;
+    setSession(nextSession);
+    if (nextSession) {
+      writeGuestBout(false);
+      setGuestBout(false);
+    }
+    if (userIdRef.current === nextUserId) return;
+    userIdRef.current = nextUserId;
+    setClubId(null);
+    setClubError(null);
+    setClubLoading(Boolean(nextUserId));
+  }, []);
+
   useEffect(() => {
     if (!supabase) {
-      setLoading(false);
+      setSessionLoading(false);
       return;
     }
 
@@ -71,32 +95,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .getSession()
       .then(({ data }) => {
         if (!cancelled) {
-          setSession(data.session);
-          if (data.session) {
-            writeGuestBout(false);
-            setGuestBout(false);
-          }
-          setLoading(false);
+          applySession(data.session);
+          setSessionLoading(false);
         }
       })
       .catch(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setSessionLoading(false);
       });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      if (nextSession) {
-        writeGuestBout(false);
-        setGuestBout(false);
-      }
+      applySession(nextSession);
     });
 
     return () => {
       cancelled = true;
       subscription.unsubscribe();
     };
+  }, [applySession]);
+
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      setClubId(null);
+      setClubError(null);
+      setClubLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setClubLoading(true);
+    setClubError(null);
+
+    resolveCurrentClubId()
+      .then((id) => {
+        if (cancelled) return;
+        setClubId(id);
+        setClubLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setClubId(null);
+        setClubError("Could not load data.");
+        setClubLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id, clubEpoch]);
+
+  const retryClub = useCallback(() => {
+    setClubEpoch((epoch) => epoch + 1);
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
@@ -124,12 +175,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   }, []);
 
+  const loading =
+    sessionLoading || Boolean(session?.user && (clubLoading || (!clubId && !clubError)));
+
   const value = useMemo<AuthContextValue>(
     () => ({
       configured: isSupabaseConfigured,
       loading,
       session,
       user: session?.user ?? null,
+      clubId,
+      clubError,
+      retryClub,
       guestBout,
       enterGuestBout,
       exitGuestBout,
@@ -137,7 +194,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUp,
       signOut,
     }),
-    [loading, session, guestBout, enterGuestBout, exitGuestBout, signIn, signUp, signOut]
+    [
+      loading,
+      session,
+      clubId,
+      clubError,
+      retryClub,
+      guestBout,
+      enterGuestBout,
+      exitGuestBout,
+      signIn,
+      signUp,
+      signOut,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

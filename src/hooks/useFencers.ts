@@ -16,15 +16,17 @@ import type { Fencer } from "@/types/fencing";
 const FENCERS_KEY = ["fencers"] as const;
 
 export function useFencers() {
-  const { user, configured } = useAuth();
+  const { clubId, configured } = useAuth();
   const queryClient = useQueryClient();
-  const clubId = user?.id;
   const enabled = configured && Boolean(clubId);
 
   const query = useQuery({
     queryKey: [...FENCERS_KEY, clubId],
     enabled,
-    queryFn: listFencers,
+    queryFn: () => {
+      if (!clubId) throw new Error("Not signed in.");
+      return listFencers(clubId);
+    },
     placeholderData: clubId ? readFencerCache(clubId) : undefined,
   });
 
