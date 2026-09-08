@@ -1,6 +1,48 @@
 export type Database = {
   public: {
     Tables: {
+      clubs: {
+        Row: {
+          id: string;
+          name: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      club_members: {
+        Row: {
+          club_id: string;
+          user_id: string;
+          role: Database["public"]["Enums"]["club_member_role"];
+          created_at: string;
+        };
+        Insert: {
+          club_id: string;
+          user_id: string;
+          role: Database["public"]["Enums"]["club_member_role"];
+          created_at?: string;
+        };
+        Update: {
+          club_id?: string;
+          user_id?: string;
+          role?: Database["public"]["Enums"]["club_member_role"];
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       fencers: {
         Row: {
           id: string;
@@ -87,8 +129,19 @@ export type Database = {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
-    Enums: Record<string, never>;
+    Functions: {
+      ensure_own_club: {
+        Args: Record<PropertyKey, never>;
+        Returns: string;
+      };
+      is_club_member: {
+        Args: { p_club_id: string };
+        Returns: boolean;
+      };
+    };
+    Enums: {
+      club_member_role: "owner" | "trainer" | "member";
+    };
     CompositeTypes: Record<string, never>;
   };
 };

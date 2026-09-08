@@ -30,11 +30,11 @@ interface IndexProps {
 }
 
 const Index = ({ settings }: IndexProps) => {
-  const { user, guestBout, exitGuestBout } = useAuth();
+  const { user, clubId, guestBout, exitGuestBout } = useAuth();
   const guestScoreboard = guestBout && !user;
   const { active } = useFencers();
   const queryClient = useQueryClient();
-  const pendingUploads = useMatchOutboxCount(user?.id);
+  const pendingUploads = useMatchOutboxCount(clubId ?? undefined);
   const [player1Score, setPlayer1Score] = useState(0);
   const [player2Score, setPlayer2Score] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
@@ -101,13 +101,13 @@ const Index = ({ settings }: IndexProps) => {
 
   const handleSave = async () => {
     if (!namedBout || selection.status !== "ok" || selection.mode !== "named") return;
-    if (!user || isTimerRunning || saved || saving) return;
+    if (!user || !clubId || isTimerRunning || saved || saving) return;
 
     setSaving(true);
     const { blueResult, redResult } = scoreResults(player1Score, player2Score);
     const payload = {
       id: newMatchId(),
-      clubId: user.id,
+      clubId,
       blueFencerId: selection.blueId,
       redFencerId: selection.redId,
       blueName,
@@ -124,18 +124,18 @@ const Index = ({ settings }: IndexProps) => {
     };
     try {
       if (!navigator.onLine) {
-        enqueueMatchOutbox(user.id, payload);
+        enqueueMatchOutbox(clubId, payload);
         setSaved(true);
         toast.message("Saved on this device. Will upload when you're online.");
         return;
       }
       await saveMatch(payload);
-      await queryClient.invalidateQueries({ queryKey: [...MATCHES_QUERY_KEY, user.id] });
+      await queryClient.invalidateQueries({ queryKey: [...MATCHES_QUERY_KEY, clubId] });
       setSaved(true);
       toast.success(blueResult === "draw" ? "Draw saved" : "Victory saved");
     } catch (error) {
       if (isNetworkError(error)) {
-        enqueueMatchOutbox(user.id, payload);
+        enqueueMatchOutbox(clubId, payload);
         setSaved(true);
         toast.message("Saved on this device. Will upload when you're online.");
         return;
