@@ -7,7 +7,7 @@ Live site: [fencing-scorer.konbo.me](https://fencing-scorer.konbo.me/)
 ## What it does
 
 - Scoreboard with blue/red sides, period timer, and a 1-second hold Reset
-- Club login (one email/password account per club) to manage fencers and save named bouts
+- Email/password login to manage fencers and save named bouts
 - **Quick bout** from the login screen: anonymous timer and scores, no Save, no roster
 - Local time/points limits (default 90 seconds / 12 points)
 - Offline Save queue: named results wait in `localStorage` and upload when the network is back
@@ -63,7 +63,7 @@ VITE_SUPABASE_ANON_KEY=your_anon_key
 
 Only the anon key belongs in the client. Do not put `service_role` in Vite env or GitHub Actions.
 
-`club_id` is `auth.uid()`. Row-level security keeps each club to its own `fencers` and `matches`.
+Roster and matches belong to a `clubs` row. Users attach through `club_members` (`owner`, `trainer`, `member`). Signup creates a club named `Fencing Club` with that user as `owner`. RLS keeps members to their club's `fencers` and `matches`. The UI does not show clubs or roles yet.
 
 ## Deploy
 

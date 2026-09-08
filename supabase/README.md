@@ -2,6 +2,8 @@
 
 `final_schema.sql` is the current database: tables, indexes, RLS, grants. Paste it into the SQL Editor on a **new** (empty) project.
 
+Tenant is `clubs`; users attach through `club_members`. Roster and matches use `club_id`. Product notes: [`docs/general/fencers-and-match-history.md`](../docs/general/fencers-and-match-history.md).
+
 Do not also replay `migrations/` on a database that was created from `final_schema.sql`.
 
 ## Existing project

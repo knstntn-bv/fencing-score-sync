@@ -41,8 +41,8 @@
 
 **Supabase** (после входа)
 
-- `fencers` и `matches`;
-- `club_id = auth.uid()`;
+- `clubs`, `club_members`, `fencers`, `matches`;
+- `club_id` — это `clubs.id`; пользователь связан через `club_members`;
 - в клиент только anon key.
 
 Схема: `supabase/final_schema.sql` и `supabase/README.md`.
@@ -73,6 +73,6 @@
 
 - realtime-табло на втором экране;
 - карточки, приоритет, периоды 3×3 по FIE;
-- несколько клубов и роли тренер/судья;
+- UI нескольких клубов, приглашений и ролей (схема `clubs` / `club_members` уже есть);
 - правка уже сохранённого боя;
 - автосохранение по нулю таймера.
