@@ -17,12 +17,31 @@
 
 Схема как в `supabase/final_schema.sql`. Ниже — смысл полей, не полный DDL.
 
+### Клуб
+
+```text
+clubs
+  id            uuid pk
+  name          text not null          -- при создании: 'Fencing Club'
+  created_at    timestamptz
+  updated_at    timestamptz
+
+club_members
+  club_id       uuid                   -- → clubs.id
+  user_id       uuid                   -- → auth.users.id
+  role          owner | trainer | member
+  created_at    timestamptz
+  pk            (club_id, user_id)
+```
+
+Один клуб — несколько пользователей. В каждом клубе хотя бы один `owner`. Клиент роли не показывает и клуб не переключает: после входа берётся членство owner, иначе самое раннее.
+
 ### Фехтовальщик
 
 ```text
 fencers
   id            uuid pk
-  club_id       uuid not null          -- = auth.uid()
+  club_id       uuid not null          -- → clubs.id
   name          text not null
   archived_at   timestamptz null       -- soft-delete: история не дырявится
   created_at    timestamptz
@@ -38,7 +57,7 @@ fencers
 ```text
 matches
   id                 uuid pk           -- задаёт клиент (нужно outbox)
-  club_id            uuid not null
+  club_id            uuid not null     -- → clubs.id
 
   blue_fencer_id     uuid not null
   red_fencer_id      uuid not null
@@ -80,9 +99,13 @@ order by finished_at desc;
 
 ## Auth и RLS
 
-Один клубный логин: email + пароль (Sign in / Create club account). Magic link нет. `club_id = auth.uid()`.
+Логин: email + пароль (Sign in / Create club account). Magic link нет. В UI по-прежнему один аккаунт; клуб создаётся внутри.
 
-Политики: authenticated видит и меняет только свои строки. Anon таблицы не читает и не пишет. `matches` только INSERT+SELECT, без UPDATE/DELETE.
+Регистрация (`handle_new_user` на `auth.users`) делает клуб `Fencing Club` и пишет пользователя как `owner`. Уже существовавшие аккаунты мигрированы так же: `clubs.id` совпадает с прежним `auth.users.id`. Если членства нет, клиент вызывает `ensure_own_club()`.
+
+После сессии клиент читает `club_members` и подставляет этот `club_id` в ростер, историю, Save, кэш и outbox. Списки дополнительно фильтруются по `club_id`.
+
+Политики: `is_club_member(club_id)`, не `club_id = auth.uid()`. Сейчас все роли клуба имеют одинаковый доступ к ростеру и записи боёв. `clubs` / `club_members` с клиента только SELECT (свои членства). Anon таблицы не читает и не пишет. `matches` только INSERT+SELECT, без UPDATE/DELETE.
 
 Сессия в `localStorage` Supabase (remember).
 
@@ -126,12 +149,12 @@ Reset → счёт и таймер сброшены, выбор сторон о�
 
 ## Что уже сделано
 
-Фундамент (схема, RLS, логин), справочник с архивом, выбор на табло включая анонимный бой, запись по счётчикам, outbox, история, статистика, persist настроек, Quick bout.
+Фундамент (схема, RLS, логин), клуб как сущность и членство, справочник с архивом, выбор на табло включая анонимный бой, запись по счётчикам, outbox, история, статистика, persist настроек, Quick bout.
 
 ## Не входит
 
 - Realtime-табло на втором экране.
 - Карточки, приоритет, периоды 3×3 по FIE.
-- Несколько клубов и роли «тренер / судья».
+- UI нескольких клубов, приглашений и разных прав ролей (в схеме `owner` / `trainer` / `member` уже есть).
 - Редактирование уже сохранённого боя.
 - Нативный Capacitor-проект в git.
