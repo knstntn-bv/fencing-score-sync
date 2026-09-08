@@ -1,25 +1,6 @@
--- Current desired schema. Apply in the Supabase SQL Editor on an empty project.
--- Do not replay timestamped files in migrations/ on top of this.
---
--- Live projects that already ran older migrations: apply only the new files
--- under migrations/, then keep this file in sync with the result.
---
--- When changing the database:
---   1. Add supabase/migrations/YYYYMMDDHHMMSS_short_name.sql (delta from current).
---   2. Update this file so it still creates the full schema from scratch.
---   3. Do not rewrite migrations that have already been applied.
-
-create extension if not exists pgcrypto;
-
-create or replace function public.set_updated_at()
-returns trigger
-language plpgsql
-as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$;
+-- Clubs as a real entity. fencers/matches.club_id no longer equals auth.uid().
+-- Existing users keep their uuid as clubs.id and become owner of that club.
+-- New users get a fresh club named 'Fencing Club' via a trigger on auth.users.
 
 create type public.club_member_role as enum ('owner', 'trainer', 'member');
 
@@ -217,91 +198,36 @@ begin
 end;
 $$;
 
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row
-  execute procedure public.handle_new_user();
+-- Preserve current club_id values (they already equal auth.users.id).
+insert into public.clubs (id, name)
+select distinct src.id, 'Fencing Club'
+from (
+  select id from auth.users
+  union
+  select club_id from public.fencers
+  union
+  select club_id from public.matches
+) as src;
 
-create table public.fencers (
-  id uuid primary key default gen_random_uuid(),
-  club_id uuid not null references public.clubs (id) on delete cascade,
-  name text not null,
-  archived_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  constraint fencers_name_not_blank check (char_length(trim(name)) > 0)
-);
+insert into public.club_members (club_id, user_id, role)
+select u.id, u.id, 'owner'::public.club_member_role
+from auth.users u;
 
-create unique index fencers_club_active_name_unique
-  on public.fencers (club_id, lower(trim(name)))
-  where archived_at is null;
+alter table public.fencers drop constraint if exists fencers_club_id_fkey;
+alter table public.fencers
+  add constraint fencers_club_id_fkey
+  foreign key (club_id) references public.clubs (id) on delete cascade;
 
-create trigger fencers_set_updated_at
-  before update on public.fencers
-  for each row
-  execute procedure public.set_updated_at();
+alter table public.matches drop constraint if exists matches_club_id_fkey;
+alter table public.matches
+  add constraint matches_club_id_fkey
+  foreign key (club_id) references public.clubs (id) on delete cascade;
 
-create table public.matches (
-  id uuid primary key default gen_random_uuid(),
-  club_id uuid not null references public.clubs (id) on delete cascade,
-
-  blue_fencer_id uuid not null references public.fencers (id),
-  red_fencer_id uuid not null references public.fencers (id),
-  blue_name text not null,
-  red_name text not null,
-
-  blue_score integer not null check (blue_score >= 0),
-  red_score integer not null check (red_score >= 0),
-  blue_result text not null,
-  red_result text not null,
-  time_limit_sec integer not null check (time_limit_sec > 0),
-  points_limit integer not null check (points_limit > 0),
-  remaining_sec integer not null check (remaining_sec >= 0),
-
-  started_at timestamptz not null,
-  finished_at timestamptz not null,
-  created_at timestamptz not null default now(),
-
-  constraint matches_distinct_fencers check (blue_fencer_id <> red_fencer_id),
-  constraint matches_names_not_blank check (
-    char_length(trim(blue_name)) > 0
-    and char_length(trim(red_name)) > 0
-  ),
-  constraint matches_blue_result_check
-    check (blue_result in ('win', 'lose', 'draw')),
-  constraint matches_red_result_check
-    check (red_result in ('win', 'lose', 'draw')),
-  constraint matches_results_consistent check (
-    (blue_score > red_score and blue_result = 'win' and red_result = 'lose')
-    or (red_score > blue_score and blue_result = 'lose' and red_result = 'win')
-    or (blue_score = red_score and blue_result = 'draw' and red_result = 'draw')
-  )
-);
-
-create index matches_club_finished_at_idx
-  on public.matches (club_id, finished_at desc);
-
-create index matches_blue_fencer_idx
-  on public.matches (blue_fencer_id);
-
-create index matches_red_fencer_idx
-  on public.matches (red_fencer_id);
-
-alter table public.clubs enable row level security;
-alter table public.club_members enable row level security;
-alter table public.fencers enable row level security;
-alter table public.matches enable row level security;
-
-create policy "clubs_select_member"
-  on public.clubs for select
-  to authenticated
-  using (public.is_club_member(id));
-
-create policy "club_members_select_own"
-  on public.club_members for select
-  to authenticated
-  using (user_id = auth.uid());
+drop policy if exists "fencers_select_own" on public.fencers;
+drop policy if exists "fencers_insert_own" on public.fencers;
+drop policy if exists "fencers_update_own" on public.fencers;
+drop policy if exists "matches_select_own" on public.matches;
+drop policy if exists "matches_insert_own" on public.matches;
 
 create policy "fencers_select_member"
   on public.fencers for select
@@ -318,8 +244,6 @@ create policy "fencers_update_member"
   to authenticated
   using (public.is_club_member(club_id))
   with check (public.is_club_member(club_id));
-
--- No delete policy: archive via update. History rows keep fencer ids.
 
 create policy "matches_select_member"
   on public.matches for select
@@ -341,7 +265,18 @@ create policy "matches_insert_member"
     )
   );
 
--- Matches are append-only. No update/delete policies.
+alter table public.clubs enable row level security;
+alter table public.club_members enable row level security;
+
+create policy "clubs_select_member"
+  on public.clubs for select
+  to authenticated
+  using (public.is_club_member(id));
+
+create policy "club_members_select_own"
+  on public.club_members for select
+  to authenticated
+  using (user_id = auth.uid());
 
 revoke all on function public.is_club_member(uuid) from public;
 revoke all on function public.ensure_own_club() from public;
@@ -352,9 +287,11 @@ grant usage on type public.club_member_role to authenticated;
 
 revoke all on public.clubs from anon;
 revoke all on public.club_members from anon;
-revoke all on public.fencers from anon;
-revoke all on public.matches from anon;
 grant select on public.clubs to authenticated;
 grant select on public.club_members to authenticated;
-grant select, insert, update on public.fencers to authenticated;
-grant select, insert on public.matches to authenticated;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row
+  execute procedure public.handle_new_user();
