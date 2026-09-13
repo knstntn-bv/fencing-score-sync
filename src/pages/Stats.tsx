@@ -1,7 +1,6 @@
 import { useMemo, type ReactNode } from "react";
-import { Link } from "react-router-dom";
-import { ArrowLeft, BarChart3 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { BarChart3 } from "lucide-react";
+import { ClubPageHeader } from "@/components/ClubNav";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/context/AuthContext";
 import { useFencers } from "@/hooks/useFencers";
@@ -53,20 +52,11 @@ function StatsShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-2xl mx-auto">
-        <div className="flex items-center gap-4 mb-8">
-          <Link to="/">
-            <Button variant="outline" size="icon" aria-label="Back to scoreboard">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-3xl font-display font-bold text-primary flex items-center gap-2">
-              <BarChart3 className="h-7 w-7" />
-              Stats
-            </h1>
-            <p className="text-muted-foreground">Record and frequent opponents, by fencer.</p>
-          </div>
-        </div>
+        <ClubPageHeader
+          title="Stats"
+          subtitle="Record and frequent opponents, by fencer."
+          icon={BarChart3}
+        />
         {children}
       </div>
     </div>

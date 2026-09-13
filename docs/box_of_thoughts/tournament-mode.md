@@ -409,7 +409,4 @@
 Круг таблиц по всем пяти типам закрыт. Формулу туров швейцарки ещё можно поправить одной фразой, если `ceil(log2 n)` не та.
 
 Модель данных и экраны: [`tournament-data-and-screens.md`](./tournament-data-and-screens.md).
-<<<<<<< HEAD
 План реализации: [`docs/implementation_plans/tournament-mode.md`](../implementation_plans/tournament-mode.md).
-=======
->>>>>>> origin/main

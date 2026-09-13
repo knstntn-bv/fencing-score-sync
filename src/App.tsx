@@ -14,6 +14,7 @@ import Settings from "./pages/Settings";
 import Fencers from "./pages/Fencers";
 import History from "./pages/History";
 import Stats from "./pages/Stats";
+import Tournaments from "./pages/Tournaments";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -46,6 +47,14 @@ const App = () => {
                   element={
                     <ClubRoute>
                       <Fencers />
+                    </ClubRoute>
+                  }
+                />
+                <Route
+                  path="/tournaments"
+                  element={
+                    <ClubRoute>
+                      <Tournaments />
                     </ClubRoute>
                   }
                 />
