@@ -18,7 +18,6 @@ import {
   swissNeedsNextRound,
   swissReadyToStart,
   swissRoundCount,
-  swissRoundsToDrop,
 } from "@/lib/tournament/swiss";
 import { scoreResults } from "@/lib/boutOutcome";
 import { playoffOverrideBlock } from "@/lib/tournament/override";
@@ -382,8 +381,7 @@ export function useTournament(id: string | undefined) {
       : false;
   const needsSwissSync =
     event?.status === "live" && event.format === "swiss" && event.pointsScheme && event.swissRounds
-      ? swissRoundsToDrop(bouts).length > 0 ||
-        swissNeedsNextRound(bouts, participants.length, event.swissRounds)
+      ? swissNeedsNextRound(bouts, participants.length, event.swissRounds)
       : false;
 
   const queue = bouts.filter((bout) => !bout.finishedAt);
