@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { ArrowLeft, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { ClubNav } from "@/components/ClubNav";
+import { OverrideBoutDialog } from "@/components/OverrideBoutDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -177,6 +178,18 @@ export default function TournamentPage() {
           standings={tournament.standings}
           fencerName={fencerName}
           finishing={tournament.finishEvent.isPending}
+          overridingId={
+            tournament.overrideBout.isPending ? tournament.overrideBout.variables?.id : undefined
+          }
+          onOverride={async (input) => {
+            try {
+              await tournament.overrideBout.mutateAsync(input);
+              toast.success("Score updated");
+            } catch (error) {
+              toast.error(tournament.mutationError(error));
+              throw error;
+            }
+          }}
           onFinish={async () => {
             try {
               await tournament.finishEvent.mutateAsync();
@@ -351,6 +364,8 @@ function ConductingPanel({
   standings,
   fencerName,
   finishing,
+  overridingId,
+  onOverride,
   onFinish,
 }: {
   status: "live" | "done";
@@ -359,6 +374,8 @@ function ConductingPanel({
   standings: StandingRow[];
   fencerName: (id: string | null) => string;
   finishing: boolean;
+  overridingId?: string;
+  onOverride: (input: { id: string; blueScore: number; redScore: number }) => Promise<void>;
   onFinish: () => Promise<void>;
 }) {
   const live = status === "live";
@@ -437,13 +454,22 @@ function ConductingPanel({
           {finishedBouts.length === 0 ? (
             <p className="text-muted-foreground">No bouts saved yet.</p>
           ) : (
-            <ul className="space-y-3">
-              {finishedBouts.map((bout) => (
-                <li key={bout.id}>
-                  <FinishedBoutRow bout={bout} />
-                </li>
-              ))}
-            </ul>
+            <>
+              <p className="text-sm text-muted-foreground">Tap a bout to correct the score.</p>
+              <ul className="space-y-3">
+                {finishedBouts.map((bout) => (
+                  <li key={bout.id}>
+                    <FinishedBoutRow
+                      bout={bout}
+                      saving={overridingId === bout.id}
+                      onOverride={async (scores) => {
+                        await onOverride({ id: bout.id, ...scores });
+                      }}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </TabsContent>
       </Tabs>
@@ -473,7 +499,16 @@ function ConductingPanel({
   );
 }
 
-function FinishedBoutRow({ bout }: { bout: TournamentBout }) {
+function FinishedBoutRow({
+  bout,
+  saving,
+  onOverride,
+}: {
+  bout: TournamentBout;
+  saving: boolean;
+  onOverride: (scores: { blueScore: number; redScore: number }) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
   const outcome =
     bout.blueResult === "draw"
       ? "Draw"
@@ -481,23 +516,42 @@ function FinishedBoutRow({ bout }: { bout: TournamentBout }) {
         ? `${bout.blueName} won`
         : `${bout.redName} won`;
   return (
-    <Card>
-      <CardContent className="p-4 space-y-2">
-        {bout.finishedAt ? (
-          <p className="text-xs text-muted-foreground">
-            {format(new Date(bout.finishedAt), "d MMM yyyy, HH:mm")}
-          </p>
-        ) : null}
-        <div className="flex items-center justify-between gap-3 text-lg font-medium">
-          <span className="text-fencer-blue min-w-0 truncate">{bout.blueName}</span>
-          <span className="font-mono tabular-nums shrink-0">
-            {bout.blueScore} – {bout.redScore}
-          </span>
-          <span className="text-fencer-red min-w-0 truncate text-right">{bout.redName}</span>
-        </div>
-        <p className="text-sm text-muted-foreground">{outcome}</p>
-      </CardContent>
-    </Card>
+    <>
+      <Card>
+        <CardContent className="p-0">
+          <button
+            type="button"
+            className="w-full text-left p-4 space-y-2 rounded-lg hover:bg-accent/40 transition-colors"
+            aria-label={`Correct score: ${bout.blueName} ${bout.blueScore}–${bout.redScore} ${bout.redName}`}
+            onClick={() => setOpen(true)}
+          >
+            {bout.finishedAt ? (
+              <p className="text-xs text-muted-foreground">
+                {format(new Date(bout.finishedAt), "d MMM yyyy, HH:mm")}
+              </p>
+            ) : null}
+            <div className="flex items-center justify-between gap-3 text-lg font-medium">
+              <span className="text-fencer-blue min-w-0 truncate">{bout.blueName}</span>
+              <span className="font-mono tabular-nums shrink-0">
+                {bout.blueScore} – {bout.redScore}
+              </span>
+              <span className="text-fencer-red min-w-0 truncate text-right">{bout.redName}</span>
+            </div>
+            <p className="text-sm text-muted-foreground">{outcome}</p>
+          </button>
+        </CardContent>
+      </Card>
+      <OverrideBoutDialog
+        bout={bout}
+        open={open}
+        saving={saving}
+        onOpenChange={setOpen}
+        onSave={async (scores) => {
+          await onOverride(scores);
+          setOpen(false);
+        }}
+      />
+    </>
   );
 }
 
