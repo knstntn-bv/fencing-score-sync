@@ -3,6 +3,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useFencers } from "@/hooks/useFencers";
 import { TOURNAMENTS_QUERY_KEY } from "@/hooks/useTournaments";
 import { drawRoundRobin, expectedRoundRobinBoutCount } from "@/lib/tournament/roundRobin";
+import { expectedPlayoffBoutCount, isPlayoffSize, playoffReadyToStart } from "@/lib/tournament/playoff";
 import { computeStandings } from "@/lib/tournament/standings";
 import { scoreResults } from "@/lib/boutOutcome";
 import { playoffOverrideBlock } from "@/lib/tournament/override";
@@ -11,6 +12,7 @@ import {
   getTournamentBout,
   listTournamentBouts,
   overrideTournamentBout,
+  replacePlayoffBouts,
   replaceRoundRobinBouts,
 } from "@/lib/tournamentBouts";
 import {
@@ -77,8 +79,14 @@ export function useTournament(id: string | undefined) {
   });
 
   const patch = useMutation({
-    mutationFn: (next: Parameters<typeof updateTournament>[1]) => {
+    mutationFn: async (next: Parameters<typeof updateTournament>[1]) => {
       if (!id) throw new Error("Missing tournament.");
+      if (next.format !== undefined) {
+        const current = await getTournament(id);
+        if (current?.status === "setup" && current.format !== next.format) {
+          await deleteTournamentBouts(id);
+        }
+      }
       return updateTournament(id, next);
     },
     onSuccess: invalidate,
@@ -115,7 +123,13 @@ export function useTournament(id: string | undefined) {
       if (current.status !== "setup") throw new Error("Draw is only available during setup.");
       const fencerIds = (await listParticipants(id)).map((row) => row.fencerId);
       if (fencerIds.length < 2) throw new Error("Check in at least two fencers.");
-      await updateTournament(id, { format: "round_robin" });
+      if (current.format === "playoff") {
+        if (!isPlayoffSize(fencerIds.length)) {
+          throw new Error("Playoff needs 2, 4, 8, 16, or 32 fencers.");
+        }
+        return replacePlayoffBouts({ tournamentId: id, clubId, fencerIds });
+      }
+      if (current.format !== "round_robin") throw new Error("Choose a format first.");
       return replaceRoundRobinBouts({
         tournamentId: id,
         clubId,
@@ -131,10 +145,15 @@ export function useTournament(id: string | undefined) {
       const current = await getTournament(id);
       if (!current) throw new Error("Missing tournament.");
       if (current.status !== "setup") throw new Error("This event already started.");
-      if (current.format !== "round_robin") throw new Error("Choose round robin first.");
-      if (!current.pointsScheme) throw new Error("Choose a points scheme first.");
       const n = (await listParticipants(id)).length;
       const bouts = await listTournamentBouts(id);
+      if (current.format === "playoff") {
+        if (!isPlayoffSize(n)) throw new Error("Playoff needs 2, 4, 8, 16, or 32 fencers.");
+        if (!playoffReadyToStart(bouts)) throw new Error("Draw the bouts before starting.");
+        return updateTournament(id, { status: "live", liveAt: new Date().toISOString() });
+      }
+      if (current.format !== "round_robin") throw new Error("Choose a format first.");
+      if (!current.pointsScheme) throw new Error("Choose a points scheme first.");
       if (bouts.length !== expectedRoundRobinBoutCount(n) || bouts.length === 0) {
         throw new Error("Draw the bouts before starting.");
       }
@@ -215,6 +234,13 @@ export function useTournament(id: string | undefined) {
     ? tournamentErrorMessage(boutsQuery.error, "Could not load bouts.")
     : null;
 
+  const expectedBoutCount =
+    tournamentQuery.data?.format === "playoff"
+      ? expectedPlayoffBoutCount(participants.length)
+      : tournamentQuery.data?.format === "round_robin"
+        ? expectedRoundRobinBoutCount(participants.length)
+        : 0;
+
   return {
     enabled,
     clubId,
@@ -226,7 +252,7 @@ export function useTournament(id: string | undefined) {
     queue,
     finishedBouts,
     standings,
-    expectedBoutCount: expectedRoundRobinBoutCount(participants.length),
+    expectedBoutCount,
     roster,
     isLoading:
       tournamentQuery.isLoading ||
