@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { format } from "date-fns";
 import { Plus, Trophy } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ClubPageHeader } from "@/components/ClubNav";
 import {
@@ -27,11 +28,13 @@ import {
 export default function TournamentsPage() {
   const { configured } = useAuth();
   const tournaments = useTournaments();
+  const navigate = useNavigate();
 
   const handleCreate = async () => {
     try {
-      await tournaments.create.mutateAsync();
+      const created = await tournaments.create.mutateAsync();
       toast.success("Tournament created");
+      navigate(`/tournaments/${created.id}`);
     } catch (error) {
       toast.error(tournaments.mutationError(error));
     }
@@ -112,8 +115,12 @@ function TournamentCard({
 }) {
   return (
     <Card>
-      <CardContent className="p-4 flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
+      <CardContent className="p-0 flex items-stretch">
+        <Link
+          to={`/tournaments/${tournament.id}`}
+          className="min-w-0 flex-1 p-4 space-y-1"
+          aria-label={`Open ${tournament.name}`}
+        >
           <p className="font-medium text-lg truncate">{tournament.name}</p>
           <p className="text-sm text-muted-foreground">
             {TOURNAMENT_STATUS_LABEL[tournament.status]}
@@ -122,24 +129,26 @@ function TournamentCard({
           <p className="text-xs text-muted-foreground">
             {format(new Date(tournament.createdAt), "d MMM yyyy")}
           </p>
+        </Link>
+        <div className="p-4 shrink-0">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" size="sm" disabled={deleting}>
+                Delete
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete {tournament.name}?</AlertDialogTitle>
+                <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => void onDelete()}>Delete</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="outline" size="sm" disabled={deleting}>
-              Delete
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete {tournament.name}?</AlertDialogTitle>
-              <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={() => void onDelete()}>Delete</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </CardContent>
     </Card>
   );
