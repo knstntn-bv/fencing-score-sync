@@ -168,6 +168,7 @@ export async function updateTournament(
     pointsLimit?: number;
     groupCount?: number | null;
     advancersPerGroup?: number | null;
+    swissRounds?: number | null;
     status?: TournamentStatus;
     liveAt?: string | null;
     finishedAt?: string | null;
@@ -180,6 +181,7 @@ export async function updateTournament(
   if (patch.pointsLimit !== undefined) payload.points_limit = patch.pointsLimit;
   if (patch.groupCount !== undefined) payload.group_count = patch.groupCount;
   if (patch.advancersPerGroup !== undefined) payload.advancers_per_group = patch.advancersPerGroup;
+  if (patch.swissRounds !== undefined) payload.swiss_rounds = patch.swissRounds;
   if (patch.status !== undefined) payload.status = patch.status;
   if (patch.liveAt !== undefined) payload.live_at = patch.liveAt;
   if (patch.finishedAt !== undefined) payload.finished_at = patch.finishedAt;

@@ -12,8 +12,17 @@ import {
 import { playoffOverrideBlock } from "@/lib/tournament/override";
 import { drawPlayoff, propagatePlayoffSlots, type PlayoffDraft } from "@/lib/tournament/playoff";
 import { computeStandings } from "@/lib/tournament/standings";
+import {
+  drawSwissRound,
+  expectedSwissRoundBoutCount,
+  lastSwissPair,
+  nextSwissRoundNumber,
+  swissNeedsNextRound,
+  swissRoundCount,
+  swissRoundsToDrop,
+} from "@/lib/tournament/swiss";
 import { requireSupabase } from "@/lib/supabase";
-import { getTournament, listParticipants, setParticipantGroups } from "@/lib/tournaments";
+import { getTournament, listParticipants, setParticipantGroups, updateTournament } from "@/lib/tournaments";
 
 type BoutRow = Database["public"]["Tables"]["tournament_bouts"]["Row"];
 type BoutInsert = Database["public"]["Tables"]["tournament_bouts"]["Insert"];
@@ -191,6 +200,111 @@ export async function replaceGroupsPlayoffBouts(input: {
   return listTournamentBouts(input.tournamentId);
 }
 
+export async function deleteSwissRounds(tournamentId: string, rounds: number[]): Promise<void> {
+  if (rounds.length === 0) return;
+  const { error } = await requireSupabase()
+    .from("tournament_bouts")
+    .delete()
+    .eq("tournament_id", tournamentId)
+    .eq("stage", "swiss")
+    .in("round_code", rounds.map(String));
+  if (error) throw error;
+}
+
+export async function insertSwissRound(input: {
+  tournamentId: string;
+  clubId: string;
+  round: number;
+  pairs: { blueId: string; redId: string }[];
+  sortOffset: number;
+}): Promise<TournamentBout[]> {
+  const rows: BoutInsert[] = input.pairs.map((pair, index) => ({
+    id: newTournamentBoutId(),
+    tournament_id: input.tournamentId,
+    club_id: input.clubId,
+    stage: "swiss",
+    round_code: String(input.round),
+    sort_order: input.sortOffset + index,
+    blue_fencer_id: pair.blueId,
+    red_fencer_id: pair.redId,
+  }));
+  return insertTournamentBouts(rows);
+}
+
+export async function replaceSwissBouts(input: {
+  tournamentId: string;
+  clubId: string;
+  fencerIds: string[];
+}): Promise<TournamentBout[]> {
+  const n = input.fencerIds.length;
+  if (n < 2) throw new Error("Check in at least two fencers.");
+  const rounds = swissRoundCount(n);
+  await deleteTournamentBouts(input.tournamentId);
+  await updateTournament(input.tournamentId, { swissRounds: rounds });
+  const people = input.fencerIds.map((id) => ({ id, name: id }));
+  const drawn = drawSwissRound(input.fencerIds, 1, [], people, "half");
+  if (drawn.pairs.length !== expectedSwissRoundBoutCount(n)) {
+    throw new Error("Could not draw the first Swiss round.");
+  }
+  await insertSwissRound({
+    tournamentId: input.tournamentId,
+    clubId: input.clubId,
+    round: 1,
+    pairs: drawn.pairs,
+    sortOffset: 0,
+  });
+  return listTournamentBouts(input.tournamentId);
+}
+
+export async function syncSwiss(tournamentId: string): Promise<boolean> {
+  const tournament = await getTournament(tournamentId);
+  if (tournament?.format !== "swiss" || !tournament.swissRounds || !tournament.pointsScheme) {
+    return false;
+  }
+  const participants = await listParticipants(tournamentId);
+  const names = await fencerNamesById(participants.map((row) => row.fencerId));
+  const people = participants.map((row) => ({
+    id: row.fencerId,
+    name: names.get(row.fencerId) ?? row.fencerId,
+  }));
+  const ids = participants.map((row) => row.fencerId);
+  let bouts = await listTournamentBouts(tournamentId);
+  let changed = false;
+
+  const drop = swissRoundsToDrop(bouts);
+  if (drop.length > 0) {
+    await deleteSwissRounds(tournamentId, drop);
+    changed = true;
+    bouts = await listTournamentBouts(tournamentId);
+  }
+
+  while (swissNeedsNextRound(bouts, ids.length, tournament.swissRounds)) {
+    const nextRound = nextSwissRoundNumber(bouts);
+    const sortOffset = bouts.reduce((max, bout) => Math.max(max, bout.sortOrder + 1), 0);
+    const drawn = drawSwissRound(
+      ids,
+      nextRound,
+      bouts.filter((bout) => bout.stage === "swiss"),
+      people,
+      tournament.pointsScheme,
+      Math.random,
+      lastSwissPair(bouts)
+    );
+    if (drawn.pairs.length === 0) break;
+    await insertSwissRound({
+      tournamentId,
+      clubId: tournament.clubId,
+      round: nextRound,
+      pairs: drawn.pairs,
+      sortOffset,
+    });
+    changed = true;
+    bouts = await listTournamentBouts(tournamentId);
+  }
+
+  return changed;
+}
+
 export async function applyPlayoffFencerUpdates(
   updates: { id: string; blueFencerId: string | null; redFencerId: string | null }[]
 ): Promise<void> {
@@ -360,6 +474,7 @@ export async function saveTournamentBout(input: SaveTournamentBoutInput): Promis
   if (saved.stage === "playoff" || saved.stage === "group") {
     await syncPlayoffTree(saved.tournamentId);
   }
+  if (saved.stage === "swiss") await syncSwiss(saved.tournamentId);
   return saved;
 }
 
@@ -400,5 +515,6 @@ export async function overrideTournamentBout(
   if (saved.stage === "playoff" || saved.stage === "group") {
     await syncPlayoffTree(saved.tournamentId);
   }
+  if (saved.stage === "swiss") await syncSwiss(saved.tournamentId);
   return saved;
 }
