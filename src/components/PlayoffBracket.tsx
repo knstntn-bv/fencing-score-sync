@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { formatPlaceholder } from "@/lib/tournament/groups";
 import {
   PLAYOFF_ROUND_LABEL,
   canStartPlayoffSlot,
@@ -57,15 +58,17 @@ function PlayoffBoutCard({
     <Card>
       <CardContent className="p-4 space-y-3">
         <PlayoffHalf
-          name={fencerName(bout.blueFencerId)}
+          name={sideLabel(bout.blueFencerId, bout.bluePlaceholder, fencerName)}
           empty={!bout.blueFencerId}
+          placeholder={!bout.blueFencerId && Boolean(bout.bluePlaceholder)}
           score={bout.finishedAt ? bout.blueScore : null}
           label={playoffPlaceLabel(bout, "blue")}
           color="blue"
         />
         <PlayoffHalf
-          name={fencerName(bout.redFencerId)}
+          name={sideLabel(bout.redFencerId, bout.redPlaceholder, fencerName)}
           empty={!bout.redFencerId}
+          placeholder={!bout.redFencerId && Boolean(bout.redPlaceholder)}
           score={bout.finishedAt ? bout.redScore : null}
           label={playoffPlaceLabel(bout, "red")}
           color="red"
@@ -82,24 +85,36 @@ function PlayoffBoutCard({
   );
 }
 
+function sideLabel(
+  fencerId: string | null,
+  placeholder: string | null,
+  fencerName: (id: string | null) => string
+): string {
+  if (fencerId) return fencerName(fencerId);
+  return formatPlaceholder(placeholder);
+}
+
 function PlayoffHalf({
   name,
   empty,
+  placeholder,
   score,
   label,
   color,
 }: {
   name: string;
   empty: boolean;
+  placeholder: boolean;
   score: number | null;
   label: string | null;
   color: "blue" | "red";
 }) {
   const tone = color === "blue" ? "text-fencer-blue" : "text-fencer-red";
+  const nameClass = empty ? "text-muted-foreground" : tone;
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className={`font-medium min-w-0 truncate ${empty ? "text-muted-foreground" : tone}`}>
-        {empty ? "—" : name}
+      <span className={`font-medium min-w-0 truncate ${placeholder || empty ? "text-muted-foreground" : nameClass}`}>
+        {name}
       </span>
       <span className="shrink-0 font-mono tabular-nums text-sm">
         {score == null ? "" : score}
