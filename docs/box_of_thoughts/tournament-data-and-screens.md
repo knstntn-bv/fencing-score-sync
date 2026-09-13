@@ -218,4 +218,5 @@ Query табло:
 
 Узкая ширина: как сейчас, иконки отдельной строкой.
 
-План кода: [`docs/implementation_plans/tournament-mode.md`](../implementation_plans/tournament-mode.md).
+План кода (IMPLEMENTED): [`docs/implementation_plans/IMPLEMENTED-tournament-mode.md`](../implementation_plans/IMPLEMENTED-tournament-mode.md).
+Канон: [`docs/general/tournament-mode.md`](../general/tournament-mode.md).

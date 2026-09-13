@@ -1,5 +1,7 @@
 # План реализации: турнирный режим
 
+**Статус: IMPLEMENTED.** Все восемь этапов на `main`. Канон продукта и техники — [`docs/general/tournament-mode.md`](../general/tournament-mode.md). Итоги — в конце этого файла; текст этапов ниже сохранён как исторический план, а не как бэклог.
+
 Пошаговый план кода. Продуктовые правила — [`docs/box_of_thoughts/tournament-mode.md`](../box_of_thoughts/tournament-mode.md). Поля, статусы, маршруты — [`docs/box_of_thoughts/tournament-data-and-screens.md`](../box_of_thoughts/tournament-data-and-screens.md).
 
 Каждый этап заканчивается рабочим куском в UI (не «только схема»). Следующий не начинать, пока предыдущий не проводится в зале на круговой / своём пресете.
@@ -303,7 +305,7 @@ Done: только Table и Bouts.
 - Несколько дорожек, запирание селектов на слоте, пережеребьёвка после `live`.
 - Победа без боя, снятие с сетки, удаление последующих боёв при оверрайде.
 - Формула туров швейцарки, если `ceil(log2 n)` окажется не той.
-- Перенос канона в `docs/general/overview.md`.
+- Перенос канона в `docs/general/overview.md`. *(сделано: [`docs/general/tournament-mode.md`](../general/tournament-mode.md) + ссылка из overview)*
 
 ## Зависимости между этапами
 
@@ -334,3 +336,51 @@ Done: только Table и Bouts.
 | Навигация | общий `ClubNav` |
 
 Ручная проверка каждого этапа: чек-ин → проведение → Save → (оверрайд) → Finish → список; клубные `/history` и `/stats` без этих боёв; узкая ширина навигации.
+
+## Итоги реализации
+
+Все восемь этапов закрыты на `main`. Продукт в зале: чек-ин из ростера, пять именованных пресетов, одна дорожка, английский UI. Канон — [`docs/general/tournament-mode.md`](../general/tournament-mode.md). Черновики в `docs/box_of_thoughts/` не переписывались; это по-прежнему рассуждения, не спецификация.
+
+### Этапы и PR
+
+| Этап | Что вышло | PR |
+|---|---|---|
+| Заметки | рамка в box of thoughts | [#16](https://github.com/knstntn-bv/fencing-score-sync/pull/16), [#18](https://github.com/knstntn-bv/fencing-score-sync/pull/18) |
+| 1 | схема, список `/tournaments`, `ClubNav` | [#19](https://github.com/knstntn-bv/fencing-score-sync/pull/19) |
+| 2 | имя + чек-ин | [#20](https://github.com/knstntn-bv/fencing-score-sync/pull/20) |
+| 3 | круговая: жеребьёвка, Queue / Table / Bouts, Save | [#21](https://github.com/knstntn-bv/fencing-score-sync/pull/21) |
+| 4 | оверрайд счёта из Bouts | [#22](https://github.com/knstntn-bv/fencing-score-sync/pull/22), hotfix импорта [#24](https://github.com/knstntn-bv/fencing-score-sync/pull/24) |
+| 5 | плей-офф + бронза | [#23](https://github.com/knstntn-bv/fencing-score-sync/pull/23) |
+| 6 | группы + плей-офф | [#25](https://github.com/knstntn-bv/fencing-score-sync/pull/25); placeholder при Start [#26](https://github.com/knstntn-bv/fencing-score-sync/pull/26); Choose на таблице [#27](https://github.com/knstntn-bv/fencing-score-sync/pull/27) |
+| 7 | швейцарка | [#28](https://github.com/knstntn-bv/fencing-score-sync/pull/28); не пересобирать несыгранный тур при live-sync [#29](https://github.com/knstntn-bv/fencing-score-sync/pull/29) |
+| 8 | царь горы | [#30](https://github.com/knstntn-bv/fencing-score-sync/pull/30); царь на синем после первого боя [#31](https://github.com/knstntn-bv/fencing-score-sync/pull/31) |
+
+Миграция: `supabase/migrations/20260913180000_tournaments.sql` (+ зеркало в `supabase/final_schema.sql`). Слои кода совпали с таблицей «Где что появится».
+
+### Что ушло в продукт как в плане
+
+- Три таблицы, enums, RLS `is_club_member(club_id)` с SELECT / INSERT / UPDATE / DELETE.
+- Статусы `setup` → `live` → `done`; Start — односторонняя точка; Finish в любой момент.
+- Чек-ин из клубного ростера; `n ≥ 2`; плей-офф ровно `2 / 4 / 8 / 16 / 32`.
+- Схема баллов обязательна для круговой / групп / швейцарки (`half` / `binary` / `football`); плей-офф и царь горы её не используют.
+- Турнирный Save **без outbox**: нет сети — ошибка, слот открыт.
+- Клубные `matches`, `/history`, `/stats` турнирные бои не видят.
+- Оверрайд только счёта из Bouts; состав пары не меняется; уже сохранённые следующие бои не удаляются. Плей-офф в ничью нельзя.
+- `sort_order` с отдыхом для круговой / групп / швейцарки; не для плей-офф и царя горы.
+- Швейцарка: `swiss_rounds = max(1, ceil(log2(n)))` на жеребьёвке, не редактируется; в жеребьёвке только тур 1; bye без строки боя, баллы победы по схеме.
+- Царь горы: без жеребьёвки слотов; `koth_exit_limit` по умолчанию 3 (ползунок 1–10 в setup); Queue = оставшиеся выходы; Save = INSERT `stage=koth`; ничья = царь держит; ссылка `/?t=<id>` без `b`.
+
+### Отклонения от исходного текста этапов
+
+Их стоит читать как фактическое поведение, а не как «план ещё не догнали»:
+
+- **Группы, ничья на срезе.** В этапе 6 была модалка «двое, выбрать одного». В продукте кнопка **Choose** стоит на строке таблицы группы; очередь окон не нужна. Слоты плей-офф остаются тусклыми, пока выборы не закрыты (#27).
+- **Группы, placeholder.** Кроме «группа сыграна», слоты плей-офф заполняются и в момент **Start event** (`status=live`), если группы уже позволяют (#26).
+- **Швейцарка, live-sync.** Несыгранные туры **не** дропаются на каждом синке после Save: иначе тур 2 бесконечно пересобирается. Drop/rebuild только на оверрайде (`syncSwiss(..., { rebuildUnplayed: true })`). Live смотрит только `swissNeedsNextRound` (#29).
+- **Царь горы, селекты.** После первого сохранённого боя синий по умолчанию = сидящий царь; красный пикер только у тех, у кого остались выходы `> 0`. Reset после Save ставит нового царя на синего и чистит претендента. Левый пикер на табло по-прежнему полный чек-ин; выбор можно сменить (#31). Список Queue по-прежнему показывает нулевые выходы как напоминание.
+
+### Не вошло (как и планировалось «после v1»)
+
+Outbox турнирных боёв; несколько дорожек; пережеребьёвка после `live`; победа без боя; снятие с сетки; удаление последующих боёв при оверрайде; другая формула числа туров швейцарки.
+
+Канон в `docs/general/` — это уже не долг, а сделанная работа этого коммита.
