@@ -6,6 +6,7 @@ import { drawRoundRobin, expectedRoundRobinBoutCount } from "@/lib/tournament/ro
 import { expectedPlayoffBoutCount, isPlayoffSize, playoffReadyToStart } from "@/lib/tournament/playoff";
 import {
   expectedGroupsPlayoffBoutCount,
+  groupPlayoffFencerPatches,
   groupsPlayoffReadyToStart,
   isValidGroupOption,
   pendingCutoffTies,
@@ -22,6 +23,7 @@ import {
   replacePlayoffBouts,
   replaceRoundRobinBouts,
   resolveGroupCutoff,
+  syncGroupsAndPlayoff,
 } from "@/lib/tournamentBouts";
 import {
   addParticipant,
@@ -202,7 +204,9 @@ export function useTournament(id: string | undefined) {
         ) {
           throw new Error("Draw the bouts before starting.");
         }
-        return updateTournament(id, { status: "live", liveAt: new Date().toISOString() });
+        const live = await updateTournament(id, { status: "live", liveAt: new Date().toISOString() });
+        await syncGroupsAndPlayoff(id);
+        return live;
       }
       if (current.format !== "round_robin") throw new Error("Choose a format first.");
       if (!current.pointsScheme) throw new Error("Choose a points scheme first.");
@@ -271,6 +275,16 @@ export function useTournament(id: string | undefined) {
     onSuccess: invalidate,
   });
 
+  const syncGroups = useMutation({
+    mutationFn: async () => {
+      if (!id) throw new Error("Missing tournament.");
+      return syncGroupsAndPlayoff(id);
+    },
+    onSuccess: (changed) => {
+      if (changed) invalidate();
+    },
+  });
+
   const participants: TournamentParticipant[] = participantsQuery.data ?? [];
   const bouts: TournamentBout[] = boutsQuery.data ?? [];
   const checkedInIds = new Set(participants.map((row) => row.fencerId));
@@ -309,6 +323,20 @@ export function useTournament(id: string | undefined) {
           event.advancersPerGroup
         )
       : [];
+  const needsGroupSync =
+    event?.status === "live" &&
+    event.format === "groups_playoff" &&
+    event.pointsScheme &&
+    event.groupCount &&
+    event.advancersPerGroup
+      ? groupPlayoffFencerPatches(
+          bouts,
+          people,
+          event.pointsScheme,
+          event.groupCount,
+          event.advancersPerGroup
+        ).patches.length > 0
+      : false;
 
   const queue = bouts.filter((bout) => !bout.finishedAt);
   const finishedBouts = [...bouts]
@@ -347,6 +375,7 @@ export function useTournament(id: string | undefined) {
     standings,
     groupTables,
     cutoffTies,
+    needsGroupSync,
     expectedBoutCount,
     roster,
     isLoading:
@@ -362,6 +391,7 @@ export function useTournament(id: string | undefined) {
     finishEvent,
     overrideBout,
     resolveCutoff,
+    syncGroups,
     mutationError: (error: unknown) => tournamentErrorMessage(error, "Request failed."),
   };
 }
