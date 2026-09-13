@@ -18,7 +18,10 @@ export function ClubNav({ className }: { className?: string }) {
     <nav className={cn("flex flex-wrap justify-end gap-2", className)} aria-label="Club">
       {LINKS.map((item) => {
         const Icon = item.icon;
-        const current = pathname === item.to;
+        const current =
+          item.to === "/tournaments"
+            ? pathname === "/tournaments" || pathname.startsWith("/tournaments/")
+            : pathname === item.to;
         return (
           <Button
             key={item.to}

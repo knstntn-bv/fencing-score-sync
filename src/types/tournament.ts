@@ -32,6 +32,13 @@ export const TOURNAMENT_STATUS_LABEL: Record<TournamentStatus, string> = {
   done: "Finished",
 };
 
+export type TournamentParticipant = {
+  tournamentId: string;
+  fencerId: string;
+  clubId: string;
+  groupNo: number | null;
+};
+
 export const TOURNAMENT_FORMAT_LABEL: Record<TournamentFormat, string> = {
   round_robin: "Round robin",
   playoff: "Playoff",
