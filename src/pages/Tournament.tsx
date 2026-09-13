@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { format } from "date-fns";
 import { ArrowLeft, Trophy } from "lucide-react";
@@ -54,6 +54,34 @@ export default function TournamentPage() {
   const { configured } = useAuth();
   const { id } = useParams<{ id: string }>();
   const tournament = useTournament(id);
+  const event = tournament.tournament;
+  const groupSyncKey = tournament.bouts
+    .map((bout) => `${bout.id}:${bout.blueFencerId}:${bout.redFencerId}:${bout.finishedAt ?? ""}`)
+    .join("|");
+  const attemptedGroupSync = useRef("");
+
+  const needsGroupSync = tournament.needsGroupSync;
+  const cutoffTieCount = tournament.cutoffTies.length;
+  const syncGroupsPending = tournament.syncGroups.isPending;
+  const syncGroupsNow = tournament.syncGroups.mutateAsync;
+
+  useEffect(() => {
+    if (!event || event.status !== "live" || event.format !== "groups_playoff") return;
+    if (cutoffTieCount > 0) return;
+    if (!needsGroupSync || syncGroupsPending) return;
+    if (attemptedGroupSync.current === groupSyncKey) return;
+    attemptedGroupSync.current = groupSyncKey;
+    void syncGroupsNow().catch(() => {
+      /* save/override/start also sync; a failed extra pass should not loop */
+    });
+  }, [
+    event,
+    groupSyncKey,
+    cutoffTieCount,
+    needsGroupSync,
+    syncGroupsPending,
+    syncGroupsNow,
+  ]);
 
   if (!configured) {
     return (
@@ -82,7 +110,7 @@ export default function TournamentPage() {
     );
   }
 
-  if (tournament.notFound || !tournament.tournament) {
+  if (tournament.notFound || !event) {
     return (
       <TournamentShell>
         <p className="text-muted-foreground mb-4">This tournament was not found.</p>
@@ -93,7 +121,6 @@ export default function TournamentPage() {
     );
   }
 
-  const event = tournament.tournament;
   const canEditCheckIn = event.status === "setup";
   const checkedCount = tournament.checkedInIds.size;
   const fencerName = (fencerId: string | null) => nameFromRoster(tournament.roster, fencerId);
