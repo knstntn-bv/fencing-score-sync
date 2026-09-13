@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { ArrowLeft, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { ClubNav } from "@/components/ClubNav";
-import { OverrideBoutDialog } from "@/components/OverrideBoutDialog";
+import { PlayoffBracket } from "@/components/PlayoffBracket";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/context/AuthContext";
 import { useTournament } from "@/hooks/useTournament";
 import { formatStandingPoints } from "@/lib/tournament/standings";
+import { isPlayoffSize, playoffReadyToStart } from "@/lib/tournament/playoff";
 import {
   TOURNAMENT_FORMAT_LABEL,
   TOURNAMENT_POINTS_SCHEME_LABEL,
@@ -37,7 +38,7 @@ import {
 import type { Fencer } from "@/types/fencing";
 import type { StandingRow } from "@/lib/tournament/standings";
 
-const LATER_FORMATS: TournamentFormat[] = ["playoff", "groups_playoff", "swiss", "king_of_hill"];
+const LATER_FORMATS: TournamentFormat[] = ["groups_playoff", "swiss", "king_of_hill"];
 const SCHEMES: TournamentPointsScheme[] = ["half", "binary", "football"];
 
 export default function TournamentPage() {
@@ -173,6 +174,8 @@ export default function TournamentPage() {
       {event.status === "live" || event.status === "done" ? (
         <ConductingPanel
           status={event.status}
+          format={event.format}
+          bouts={tournament.bouts}
           queue={tournament.queue}
           finishedBouts={tournament.finishedBouts}
           standings={tournament.standings}
@@ -230,18 +233,21 @@ function SetupPanel({
     }
   };
 
+  const playoffOk = isPlayoffSize(tournament.checkedInIds.size);
   const canStart =
-    event.format === "round_robin" &&
-    Boolean(event.pointsScheme) &&
-    tournament.bouts.length === tournament.expectedBoutCount &&
-    tournament.expectedBoutCount > 0;
+    event.format === "playoff"
+      ? playoffReadyToStart(tournament.bouts)
+      : event.format === "round_robin" &&
+        Boolean(event.pointsScheme) &&
+        tournament.bouts.length === tournament.expectedBoutCount &&
+        tournament.expectedBoutCount > 0;
 
   return (
     <section className="space-y-6">
       <div>
         <h2 className="text-lg font-medium">Format</h2>
         <p className="text-sm text-muted-foreground mb-3">
-          Round robin is available now. Other presets come later.
+          Round robin and playoff are available now. Other presets come later.
         </p>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -257,14 +263,35 @@ function SetupPanel({
           >
             {TOURNAMENT_FORMAT_LABEL.round_robin}
           </Button>
+          <Button
+            type="button"
+            variant={event.format === "playoff" ? "default" : "outline"}
+            disabled={!playoffOk}
+            title={playoffOk ? undefined : "Playoff needs 2, 4, 8, 16, or 32 fencers."}
+            onClick={async () => {
+              try {
+                await tournament.patch.mutateAsync({ format: "playoff" });
+              } catch (error) {
+                toast.error(tournament.mutationError(error));
+              }
+            }}
+          >
+            {TOURNAMENT_FORMAT_LABEL.playoff}
+          </Button>
           {LATER_FORMATS.map((item) => (
             <Button key={item} type="button" variant="outline" disabled>
               {TOURNAMENT_FORMAT_LABEL[item]}
             </Button>
           ))}
         </div>
+        {!playoffOk ? (
+          <p className="text-sm text-muted-foreground mt-2">
+            Playoff needs 2, 4, 8, 16, or 32 fencers.
+          </p>
+        ) : null}
       </div>
 
+      {event.format === "playoff" ? null : (
       <div>
         <h2 className="text-lg font-medium">Points scheme</h2>
         <p className="text-sm text-muted-foreground mb-3">
@@ -289,6 +316,7 @@ function SetupPanel({
           ))}
         </div>
       </div>
+      )}
 
       <div className="space-y-4">
         <div className="space-y-2">
@@ -319,7 +347,7 @@ function SetupPanel({
         <Button
           type="button"
           variant="secondary"
-          disabled={tournament.draw.isPending}
+          disabled={!event.format || tournament.draw.isPending}
           onClick={async () => {
             try {
               await tournament.draw.mutateAsync();
@@ -350,8 +378,10 @@ function SetupPanel({
       <p className="text-sm text-muted-foreground">
         {tournament.bouts.length > 0
           ? `${tournament.bouts.length} of ${tournament.expectedBoutCount} bouts ready.`
-          : "Draw the bouts, then start."}
-        {!event.pointsScheme ? " Choose a points scheme to start." : null}
+          : "Choose a format, draw the bouts, then start."}
+        {event.format === "round_robin" && !event.pointsScheme
+          ? " Choose a points scheme to start."
+          : null}
       </p>
     </section>
   );
@@ -359,6 +389,8 @@ function SetupPanel({
 
 function ConductingPanel({
   status,
+  format,
+  bouts,
   queue,
   finishedBouts,
   standings,
@@ -369,6 +401,8 @@ function ConductingPanel({
   onFinish,
 }: {
   status: "live" | "done";
+  format: TournamentFormat | null;
+  bouts: TournamentBout[];
   queue: TournamentBout[];
   finishedBouts: TournamentBout[];
   standings: StandingRow[];
@@ -392,7 +426,9 @@ function ConductingPanel({
 
         {live ? (
           <TabsContent value="queue" className="space-y-3">
-            {queue.length === 0 ? (
+            {format === "playoff" ? (
+              <PlayoffBracket bouts={bouts} fencerName={fencerName} showStart />
+            ) : queue.length === 0 ? (
               <p className="text-muted-foreground">No bouts left in the queue.</p>
             ) : (
               <ul className="space-y-3">
@@ -422,7 +458,9 @@ function ConductingPanel({
         ) : null}
 
         <TabsContent value="table" className="space-y-3">
-          {standings.length === 0 ? (
+          {format === "playoff" ? (
+            <PlayoffBracket bouts={bouts} fencerName={fencerName} showStart={false} />
+          ) : standings.length === 0 ? (
             <p className="text-muted-foreground">Standings appear after bouts are saved.</p>
           ) : (
             <ul className="space-y-3">

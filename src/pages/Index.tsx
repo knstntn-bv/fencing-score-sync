@@ -6,6 +6,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ClubNav } from "@/components/ClubNav";
 import { TournamentScoreboardBar } from "@/components/TournamentScoreboardBar";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import ScoreDisplay from "@/components/ScoreDisplay";
 import Timer from "@/components/Timer";
 import FencerPicker from "@/components/FencerPicker";
@@ -28,6 +37,7 @@ import { enqueueMatchOutbox } from "@/lib/matchOutbox";
 import { newMatchId, saveMatch } from "@/lib/matches";
 import { isNetworkError } from "@/lib/networkError";
 import { saveTournamentBout } from "@/lib/tournamentBouts";
+import { playoffOverrideBlock } from "@/lib/tournament/override";
 import { tournamentErrorMessage } from "@/lib/tournaments";
 import type { Fencer } from "@/types/fencing";
 
@@ -66,6 +76,7 @@ const Index = ({ settings }: IndexProps) => {
   const [redNameSnap, setRedNameSnap] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [playoffDrawOpen, setPlayoffDrawOpen] = useState(false);
   const hydratedSlotKey = useRef<string | null>(null);
 
   const selection = resolveBoutSelection(blueFencerId, redFencerId);
@@ -165,6 +176,11 @@ const Index = ({ settings }: IndexProps) => {
         return;
       }
       if (slot.bout.finishedAt) return;
+      const blocked = playoffOverrideBlock(slot.bout.stage, player1Score, player2Score);
+      if (blocked) {
+        setPlayoffDrawOpen(true);
+        return;
+      }
       if (!navigator.onLine) {
         toast.error("Need a network connection to save a tournament bout.");
         return;
@@ -383,6 +399,20 @@ const Index = ({ settings }: IndexProps) => {
           )}
         </div>
       </div>
+
+      <AlertDialog open={playoffDrawOpen} onOpenChange={setPlayoffDrawOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Playoff bouts need a winner</AlertDialogTitle>
+            <AlertDialogDescription>
+              Equal scores cannot be saved. Fence to a deciding touch, then save the victory.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction>OK</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
