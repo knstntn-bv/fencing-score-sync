@@ -38,6 +38,7 @@ import { enqueueMatchOutbox } from "@/lib/matchOutbox";
 import { newMatchId, saveMatch } from "@/lib/matches";
 import { isNetworkError } from "@/lib/networkError";
 import { insertKothBout, saveTournamentBout } from "@/lib/tournamentBouts";
+import { kothChallengerIds } from "@/lib/tournament/kingOfHill";
 import { playoffOverrideBlock } from "@/lib/tournament/override";
 import { tournamentErrorMessage } from "@/lib/tournaments";
 import type { Fencer } from "@/types/fencing";
@@ -117,7 +118,13 @@ const Index = ({ settings }: IndexProps) => {
     (fencer, index, all) =>
       event.checkedInIds.has(fencer.id) && all.findIndex((row) => row.id === fencer.id) === index
   );
+  const kothKingId = event.kothExits.find((row) => row.isKing)?.fencerId ?? null;
+  const challengerIds = kothChallengerIds(event.kothExits);
+  const kothChallengers = kothFencers.filter(
+    (fencer) => challengerIds.has(fencer.id) || fencer.id === redFencerId
+  );
   const pickerFencers = kothBoard ? kothFencers : active;
+  const redPickerFencers = kothBoard ? kothChallengers : pickerFencers;
 
   const liveBlueName = fencerName(pickerFencers, blueFencerId, "Fencer 1");
   const liveRedName = fencerName(pickerFencers, redFencerId, "Fencer 2");
@@ -181,6 +188,12 @@ const Index = ({ settings }: IndexProps) => {
     }
   }, [tournamentSlot, slotBoutId, slotFinishedAt, slot.bout, slot.tournament?.timeLimitSec, settings.timeLimit]);
 
+  useEffect(() => {
+    if (!kothBoard || namesLocked) return;
+    if (!kothKingId) return;
+    setBlueFencerId((current) => current ?? kothKingId);
+  }, [kothBoard, kothKingId, namesLocked]);
+
   const handleReset = () => {
     if (slot.bout?.finishedAt) return;
     setPlayer1Score(0);
@@ -193,6 +206,12 @@ const Index = ({ settings }: IndexProps) => {
     setStartedAt(null);
     setSaved(false);
     setTimerResetId((id) => id + 1);
+    if (kothBoard) {
+      if (kothKingId) {
+        setBlueFencerId(kothKingId);
+        setRedFencerId(null);
+      }
+    }
   };
 
   const handleSave = async () => {
@@ -420,11 +439,11 @@ const Index = ({ settings }: IndexProps) => {
             nameControl={
               guestScoreboard ? undefined : (
                 <FencerPicker
-                  fencers={pickerFencers}
+                  fencers={redPickerFencers}
                   value={redFencerId}
                   excludeId={blueFencerId}
                   disabled={namesLocked}
-                  placeholder="Anonymous"
+                  placeholder={kothBoard ? "Challenger" : "Anonymous"}
                   lockedName={redName}
                   onChange={setRedFencerId}
                 />

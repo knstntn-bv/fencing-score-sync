@@ -91,6 +91,10 @@ export function kothExits(
     });
 }
 
+export function kothChallengerIds(exits: KothExitRow[]): Set<string> {
+  return new Set(exits.filter((row) => row.remaining > 0).map((row) => row.fencerId));
+}
+
 export function computeKothStandings(
   people: { id: string; name: string }[],
   bouts: TournamentBout[]
