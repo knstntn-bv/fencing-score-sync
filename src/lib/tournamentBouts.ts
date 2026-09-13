@@ -1,6 +1,7 @@
 import type { Database } from "@/types/database";
 import type { BoutResult } from "@/types/fencing";
 import type { TournamentBout } from "@/types/tournament";
+import { playoffOverrideBlock } from "@/lib/tournament/override";
 import { requireSupabase } from "@/lib/supabase";
 
 type BoutRow = Database["public"]["Tables"]["tournament_bouts"]["Row"];
@@ -143,5 +144,41 @@ export async function saveTournamentBout(input: SaveTournamentBoutInput): Promis
 
   if (error) throw error;
   if (!data) throw new Error("This bout is already saved.");
+  return mapTournamentBout(data);
+}
+
+export type OverrideTournamentBoutInput = {
+  id: string;
+  blueScore: number;
+  redScore: number;
+  blueResult: BoutResult;
+  redResult: BoutResult;
+};
+
+/** Correct a saved score. Pair composition stays. */
+export async function overrideTournamentBout(
+  input: OverrideTournamentBoutInput
+): Promise<TournamentBout> {
+  const current = await getTournamentBout(input.id);
+  if (!current) throw new Error("This bout was not found.");
+  if (!current.finishedAt) throw new Error("This bout is not saved yet.");
+  const blocked = playoffOverrideBlock(current.stage, input.blueScore, input.redScore);
+  if (blocked) throw new Error(blocked);
+
+  const { data, error } = await requireSupabase()
+    .from("tournament_bouts")
+    .update({
+      blue_score: input.blueScore,
+      red_score: input.redScore,
+      blue_result: input.blueResult,
+      red_result: input.redResult,
+    })
+    .eq("id", input.id)
+    .not("finished_at", "is", null)
+    .select("*")
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error("This bout was not found.");
   return mapTournamentBout(data);
 }

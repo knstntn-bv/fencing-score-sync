@@ -4,10 +4,13 @@ import { useFencers } from "@/hooks/useFencers";
 import { TOURNAMENTS_QUERY_KEY } from "@/hooks/useTournaments";
 import { drawRoundRobin, expectedRoundRobinBoutCount } from "@/lib/tournament/roundRobin";
 import { computeStandings } from "@/lib/tournament/standings";
+import { scoreResults } from "@/lib/boutOutcome";
+import { playoffOverrideBlock } from "@/lib/tournament/override";
 import {
   deleteTournamentBouts,
   getTournamentBout,
   listTournamentBouts,
+  overrideTournamentBout,
   replaceRoundRobinBouts,
 } from "@/lib/tournamentBouts";
 import {
@@ -154,6 +157,38 @@ export function useTournament(id: string | undefined) {
     onSuccess: invalidate,
   });
 
+  const overrideBout = useMutation({
+    mutationFn: async (input: { id: string; blueScore: number; redScore: number }) => {
+      if (!id) throw new Error("Missing tournament.");
+      const current = await getTournament(id);
+      if (!current) throw new Error("Missing tournament.");
+      if (current.status !== "live" && current.status !== "done") {
+        throw new Error("Scores can be edited after the event starts.");
+      }
+      if (!navigator.onLine) {
+        throw new Error("Need a network connection to update a tournament bout.");
+      }
+      const bout = await getTournamentBout(input.id);
+      if (!bout || bout.tournamentId !== id) throw new Error("This bout was not found.");
+      const blocked = playoffOverrideBlock(bout.stage, input.blueScore, input.redScore);
+      if (blocked) throw new Error(blocked);
+      const { blueResult, redResult } = scoreResults(input.blueScore, input.redScore);
+      return overrideTournamentBout({
+        id: input.id,
+        blueScore: input.blueScore,
+        redScore: input.redScore,
+        blueResult,
+        redResult,
+      });
+    },
+    onSuccess: (bout) => {
+      invalidate();
+      queryClient.invalidateQueries({
+        queryKey: [...TOURNAMENT_BOUTS_QUERY_KEY, "slot", bout.id],
+      });
+    },
+  });
+
   const participants: TournamentParticipant[] = participantsQuery.data ?? [];
   const bouts: TournamentBout[] = boutsQuery.data ?? [];
   const checkedInIds = new Set(participants.map((row) => row.fencerId));
@@ -204,6 +239,7 @@ export function useTournament(id: string | undefined) {
     draw,
     startEvent,
     finishEvent,
+    overrideBout,
     mutationError: (error: unknown) => tournamentErrorMessage(error, "Request failed."),
   };
 }
