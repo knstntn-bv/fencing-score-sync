@@ -365,6 +365,26 @@ export function placeholderOccupants(
   return found.sort((a, b) => a.place - b.place);
 }
 
+export function playoffSideHeld(
+  placeholder: string | null,
+  pendingGroupNos: ReadonlySet<number>
+): boolean {
+  const parsed = parsePlaceholder(placeholder);
+  return Boolean(parsed && pendingGroupNos.has(parsed.groupNo));
+}
+
+/** First-round slots that belong to a group still picking advancers. */
+export function playoffBoutHeld(
+  bout: TournamentBout,
+  pendingGroupNos: ReadonlySet<number>
+): boolean {
+  if (pendingGroupNos.size === 0) return false;
+  return (
+    playoffSideHeld(bout.bluePlaceholder, pendingGroupNos) ||
+    playoffSideHeld(bout.redPlaceholder, pendingGroupNos)
+  );
+}
+
 export function pendingCutoffTies(
   bouts: TournamentBout[],
   people: { id: string; name: string; groupNo: number | null }[],
@@ -444,8 +464,10 @@ export function groupPlayoffFencerPatches(
 
   for (let groupNo = 1; groupNo <= groupCount; groupNo++) {
     const members = people.filter((person) => person.groupNo === groupNo);
-    groupsToTouch.add(groupNo);
-    if (!groupComplete(next, groupNo, members.length)) continue;
+    if (!groupComplete(next, groupNo, members.length)) {
+      groupsToTouch.add(groupNo);
+      continue;
+    }
 
     const standings = computeStandings(
       members.map((person) => ({ id: person.id, name: person.name })),
@@ -456,7 +478,9 @@ export function groupPlayoffFencerPatches(
     const resolved = resolveGroupPlaces(standings, advancers, picks);
     if (resolved.tie) {
       ties.push({ groupNo, remaining: resolved.tie.remaining, candidates: resolved.tie.candidates });
+      continue;
     }
+    groupsToTouch.add(groupNo);
     for (const fill of resolved.fills) {
       fills.push({ groupNo, place: fill.place, fencerId: fill.fencerId });
     }

@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatPlaceholder } from "@/lib/tournament/groups";
+import { formatPlaceholder, playoffBoutHeld, playoffSideHeld } from "@/lib/tournament/groups";
 import {
   PLAYOFF_ROUND_LABEL,
   canStartPlayoffSlot,
@@ -14,15 +14,18 @@ export function PlayoffBracket({
   bouts,
   fencerName,
   showStart,
+  pendingGroupNos = [],
 }: {
   bouts: TournamentBout[];
   fencerName: (id: string | null) => string;
   showStart: boolean;
+  pendingGroupNos?: number[];
 }) {
   const groups = groupPlayoffRounds(bouts);
   if (groups.length === 0) {
     return <p className="text-muted-foreground">No playoff bouts yet.</p>;
   }
+  const pending = new Set(pendingGroupNos);
 
   return (
     <div className="space-y-6">
@@ -34,7 +37,12 @@ export function PlayoffBracket({
           <ul className="space-y-3">
             {group.bouts.map((bout) => (
               <li key={bout.id}>
-                <PlayoffBoutCard bout={bout} fencerName={fencerName} showStart={showStart} />
+                <PlayoffBoutCard
+                  bout={bout}
+                  fencerName={fencerName}
+                  showStart={showStart}
+                  pendingGroupNos={pending}
+                />
               </li>
             ))}
           </ul>
@@ -48,29 +56,38 @@ function PlayoffBoutCard({
   bout,
   fencerName,
   showStart,
+  pendingGroupNos,
 }: {
   bout: TournamentBout;
   fencerName: (id: string | null) => string;
   showStart: boolean;
+  pendingGroupNos: ReadonlySet<number>;
 }) {
-  const ready = canStartPlayoffSlot(bout);
+  const held = playoffBoutHeld(bout, pendingGroupNos);
+  const ready = !held && canStartPlayoffSlot(bout);
   return (
-    <Card>
+    <Card className={held ? "opacity-40" : undefined}>
       <CardContent className="p-4 space-y-3">
         <PlayoffHalf
-          name={sideLabel(bout.blueFencerId, bout.bluePlaceholder, fencerName)}
-          empty={!bout.blueFencerId}
-          placeholder={!bout.blueFencerId && Boolean(bout.bluePlaceholder)}
+          name={sideLabel(bout.blueFencerId, bout.bluePlaceholder, fencerName, pendingGroupNos)}
+          empty={!bout.blueFencerId || playoffSideHeld(bout.bluePlaceholder, pendingGroupNos)}
+          placeholder={
+            playoffSideHeld(bout.bluePlaceholder, pendingGroupNos) ||
+            (!bout.blueFencerId && Boolean(bout.bluePlaceholder))
+          }
           score={bout.finishedAt ? bout.blueScore : null}
-          label={playoffPlaceLabel(bout, "blue")}
+          label={held ? null : playoffPlaceLabel(bout, "blue")}
           color="blue"
         />
         <PlayoffHalf
-          name={sideLabel(bout.redFencerId, bout.redPlaceholder, fencerName)}
-          empty={!bout.redFencerId}
-          placeholder={!bout.redFencerId && Boolean(bout.redPlaceholder)}
+          name={sideLabel(bout.redFencerId, bout.redPlaceholder, fencerName, pendingGroupNos)}
+          empty={!bout.redFencerId || playoffSideHeld(bout.redPlaceholder, pendingGroupNos)}
+          placeholder={
+            playoffSideHeld(bout.redPlaceholder, pendingGroupNos) ||
+            (!bout.redFencerId && Boolean(bout.redPlaceholder))
+          }
           score={bout.finishedAt ? bout.redScore : null}
-          label={playoffPlaceLabel(bout, "red")}
+          label={held ? null : playoffPlaceLabel(bout, "red")}
           color="red"
         />
         {showStart && ready ? (
@@ -88,8 +105,10 @@ function PlayoffBoutCard({
 function sideLabel(
   fencerId: string | null,
   placeholder: string | null,
-  fencerName: (id: string | null) => string
+  fencerName: (id: string | null) => string,
+  pendingGroupNos: ReadonlySet<number>
 ): string {
+  if (playoffSideHeld(placeholder, pendingGroupNos)) return formatPlaceholder(placeholder);
   if (fencerId) return fencerName(fencerId);
   return formatPlaceholder(placeholder);
 }
@@ -110,12 +129,10 @@ function PlayoffHalf({
   color: "blue" | "red";
 }) {
   const tone = color === "blue" ? "text-fencer-blue" : "text-fencer-red";
-  const nameClass = empty ? "text-muted-foreground" : tone;
+  const nameClass = empty || placeholder ? "text-muted-foreground" : tone;
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className={`font-medium min-w-0 truncate ${placeholder || empty ? "text-muted-foreground" : nameClass}`}>
-        {name}
-      </span>
+      <span className={`font-medium min-w-0 truncate ${nameClass}`}>{name}</span>
       <span className="shrink-0 font-mono tabular-nums text-sm">
         {score == null ? "" : score}
       </span>

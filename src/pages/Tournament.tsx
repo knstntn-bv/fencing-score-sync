@@ -4,7 +4,6 @@ import { format } from "date-fns";
 import { ArrowLeft, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { ClubNav } from "@/components/ClubNav";
-import { CutoffTieDialog } from "@/components/CutoffTieDialog";
 import { OverrideBoutDialog } from "@/components/OverrideBoutDialog";
 import { PlayoffBracket } from "@/components/PlayoffBracket";
 import {
@@ -34,6 +33,7 @@ import {
   groupsPlayoffReadyToStart,
   groupTitle,
   validGroupOptions,
+  type CutoffTie,
 } from "@/lib/tournament/groups";
 import { isPlayoffSize, playoffReadyToStart } from "@/lib/tournament/playoff";
 import {
@@ -216,7 +216,7 @@ export default function TournamentPage() {
           finishedBouts={tournament.finishedBouts}
           standings={tournament.standings}
           groupTables={tournament.groupTables}
-          cutoffTie={tournament.cutoffTies[0] ?? null}
+          cutoffTies={tournament.cutoffTies}
           resolvingId={
             tournament.resolveCutoff.isPending
               ? tournament.resolveCutoff.variables?.fencerId
@@ -570,7 +570,7 @@ function ConductingPanel({
   finishedBouts,
   standings,
   groupTables,
-  cutoffTie,
+  cutoffTies,
   resolvingId,
   fencerName,
   finishing,
@@ -586,7 +586,7 @@ function ConductingPanel({
   finishedBouts: TournamentBout[];
   standings: StandingRow[];
   groupTables: { groupNo: number; standings: StandingRow[] }[];
-  cutoffTie: { groupNo: number; remaining: number; candidates: StandingRow[] } | null;
+  cutoffTies: CutoffTie[];
   resolvingId?: string;
   fencerName: (id: string | null) => string;
   finishing: boolean;
@@ -602,18 +602,11 @@ function ConductingPanel({
     bouts: queue.filter((bout) => bout.stage === "group" && bout.groupNo === table.groupNo),
   }));
   const hasGroupQueue = groupQueue.some((group) => group.bouts.length > 0);
+  const pendingGroupNos = cutoffTies.map((tie) => tie.groupNo);
+  const cutoffByGroup = new Map(cutoffTies.map((tie) => [tie.groupNo, tie]));
 
   return (
     <section className="space-y-4">
-      {cutoffTie ? (
-        <CutoffTieDialog
-          groupNo={cutoffTie.groupNo}
-          remaining={cutoffTie.remaining}
-          candidates={cutoffTie.candidates}
-          savingId={resolvingId}
-          onPick={(fencerId) => onResolveCutoff({ groupNo: cutoffTie.groupNo, fencerId })}
-        />
-      ) : null}
       <Tabs key={defaultTab} defaultValue={defaultTab}>
         <TabsList className={`grid w-full ${live ? "grid-cols-3" : "grid-cols-2"}`}>
           {live ? <TabsTrigger value="queue">Queue</TabsTrigger> : null}
@@ -645,7 +638,12 @@ function ConductingPanel({
                       )
                     )
                   : null}
-                <PlayoffBracket bouts={bouts} fencerName={fencerName} showStart />
+                <PlayoffBracket
+                  bouts={bouts}
+                  fencerName={fencerName}
+                  showStart
+                  pendingGroupNos={pendingGroupNos}
+                />
                 {!hasGroupQueue && queue.filter((bout) => bout.stage === "playoff").length === 0 ? (
                   <p className="text-muted-foreground">No bouts left in the queue.</p>
                 ) : null}
@@ -669,19 +667,43 @@ function ConductingPanel({
             <PlayoffBracket bouts={bouts} fencerName={fencerName} showStart={false} />
           ) : format === "groups_playoff" ? (
             <>
-              {groupTables.map((table) => (
-                <div key={table.groupNo} className="space-y-3">
-                  <h3 className="text-sm font-medium text-muted-foreground">
-                    {groupTitle(table.groupNo)}
-                  </h3>
-                  {table.standings.length === 0 ? (
-                    <p className="text-muted-foreground">Standings appear after bouts are saved.</p>
-                  ) : (
-                    <StandingsList rows={table.standings} />
-                  )}
-                </div>
-              ))}
-              <PlayoffBracket bouts={bouts} fencerName={fencerName} showStart={false} />
+              {groupTables.map((table) => {
+                const tie = cutoffByGroup.get(table.groupNo);
+                return (
+                  <div key={table.groupNo} className="space-y-3">
+                    <h3 className="text-sm font-medium text-muted-foreground">
+                      {groupTitle(table.groupNo)}
+                    </h3>
+                    {live && tie ? (
+                      <p className="text-sm text-muted-foreground">
+                        {tie.remaining === 1
+                          ? "Tied on points. Choose who advances to the playoff."
+                          : `Tied on points. Choose ${tie.remaining} fencers to advance.`}
+                      </p>
+                    ) : null}
+                    {table.standings.length === 0 ? (
+                      <p className="text-muted-foreground">Standings appear after bouts are saved.</p>
+                    ) : (
+                      <StandingsList
+                        rows={table.standings}
+                        chooseIds={live && tie ? new Set(tie.candidates.map((row) => row.fencerId)) : undefined}
+                        choosingId={resolvingId}
+                        onChoose={
+                          live && tie
+                            ? (fencerId) => onResolveCutoff({ groupNo: table.groupNo, fencerId })
+                            : undefined
+                        }
+                      />
+                    )}
+                  </div>
+                );
+              })}
+              <PlayoffBracket
+                bouts={bouts}
+                fencerName={fencerName}
+                showStart={false}
+                pendingGroupNos={pendingGroupNos}
+              />
             </>
           ) : standings.length === 0 ? (
             <p className="text-muted-foreground">Standings appear after bouts are saved.</p>
@@ -762,29 +784,54 @@ function GroupQueueCard({
   );
 }
 
-function StandingsList({ rows }: { rows: StandingRow[] }) {
+function StandingsList({
+  rows,
+  chooseIds,
+  choosingId,
+  onChoose,
+}: {
+  rows: StandingRow[];
+  chooseIds?: Set<string>;
+  choosingId?: string;
+  onChoose?: (fencerId: string) => void;
+}) {
   return (
     <ul className="space-y-3">
-      {rows.map((row) => (
-        <li key={row.fencerId}>
-          <Card>
-            <CardContent className="p-4 flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-medium truncate">{row.name}</p>
-                <p className="text-sm text-muted-foreground">
-                  {formatStandingPoints(row.points)} pts · {row.bouts}{" "}
-                  {row.bouts === 1 ? "bout" : "bouts"}
-                </p>
-              </div>
-              <p className="font-mono tabular-nums text-sm shrink-0">
-                <span className="text-emerald-500">+{row.scored}</span>
-                <span className="text-muted-foreground"> / </span>
-                <span className="text-red-500">-{row.received}</span>
-              </p>
-            </CardContent>
-          </Card>
-        </li>
-      ))}
+      {rows.map((row) => {
+        const canChoose = Boolean(onChoose && chooseIds?.has(row.fencerId));
+        return (
+          <li key={row.fencerId}>
+            <Card>
+              <CardContent className="p-4 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-medium truncate">{row.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {formatStandingPoints(row.points)} pts · {row.bouts}{" "}
+                    {row.bouts === 1 ? "bout" : "bouts"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <p className="font-mono tabular-nums text-sm">
+                    <span className="text-emerald-500">+{row.scored}</span>
+                    <span className="text-muted-foreground"> / </span>
+                    <span className="text-red-500">-{row.received}</span>
+                  </p>
+                  {canChoose ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={Boolean(choosingId)}
+                      onClick={() => onChoose?.(row.fencerId)}
+                    >
+                      {choosingId === row.fencerId ? "Saving…" : "Choose"}
+                    </Button>
+                  ) : null}
+                </div>
+              </CardContent>
+            </Card>
+          </li>
+        );
+      })}
     </ul>
   );
 }
