@@ -1,8 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
 import { format } from "date-fns";
-import { ArrowLeft, BarChart3, History as HistoryIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { History as HistoryIcon } from "lucide-react";
+import { ClubPageHeader } from "@/components/ClubNav";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import {
@@ -88,25 +87,11 @@ function HistoryShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-2xl mx-auto">
-        <div className="flex items-center gap-4 mb-8">
-          <Link to="/">
-            <Button variant="outline" size="icon" aria-label="Back to scoreboard">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-3xl font-display font-bold text-primary flex items-center gap-2">
-              <HistoryIcon className="h-7 w-7 shrink-0" />
-              History
-            </h1>
-            <p className="text-muted-foreground">Saved bouts, newest first.</p>
-          </div>
-          <Link to="/stats">
-            <Button variant="outline" size="icon" aria-label="Stats">
-              <BarChart3 className="h-4 w-4" />
-            </Button>
-          </Link>
-        </div>
+        <ClubPageHeader
+          title="History"
+          subtitle="Saved bouts, newest first."
+          icon={HistoryIcon}
+        />
         {children}
       </div>
     </div>

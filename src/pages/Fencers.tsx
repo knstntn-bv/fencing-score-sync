@@ -1,7 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Link } from "react-router-dom";
-import { Archive, ArrowLeft, BarChart3, Check, Pencil, RotateCcw, UserPlus, Users, X } from "lucide-react";
+import { Archive, Check, Pencil, RotateCcw, UserPlus, Users, X } from "lucide-react";
 import { toast } from "sonner";
+import { ClubPageHeader } from "@/components/ClubNav";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -164,25 +164,11 @@ function FencersShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-2xl mx-auto">
-        <div className="flex items-center gap-4 mb-8">
-          <Link to="/">
-            <Button variant="outline" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-3xl font-display font-bold text-primary flex items-center gap-2">
-              <Users className="h-7 w-7 shrink-0" />
-              Fencers
-            </h1>
-            <p className="text-muted-foreground">Club roster. Archive keeps bout history intact.</p>
-          </div>
-          <Link to="/stats">
-            <Button variant="outline" size="icon" aria-label="Stats">
-              <BarChart3 className="h-4 w-4" />
-            </Button>
-          </Link>
-        </div>
+        <ClubPageHeader
+          title="Fencers"
+          subtitle="Club roster. Archive keeps bout history intact."
+          icon={Users}
+        />
         {children}
       </div>
     </div>

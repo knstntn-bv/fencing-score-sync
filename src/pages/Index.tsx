@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { BarChart3, History as HistoryIcon, Settings, Users } from "lucide-react";
+import { Settings } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import { ClubNav } from "@/components/ClubNav";
 import { Button } from "@/components/ui/button";
 import ScoreDisplay from "@/components/ScoreDisplay";
 import Timer from "@/components/Timer";
@@ -160,23 +161,7 @@ const Index = ({ settings }: IndexProps) => {
                 Sign in
               </Button>
             ) : (
-              <>
-                <Link to="/fencers">
-                  <Button variant="outline" size="icon" aria-label="Fencers">
-                    <Users className="h-4 w-4" />
-                  </Button>
-                </Link>
-                <Link to="/history">
-                  <Button variant="outline" size="icon" aria-label="History">
-                    <HistoryIcon className="h-4 w-4" />
-                  </Button>
-                </Link>
-                <Link to="/stats">
-                  <Button variant="outline" size="icon" aria-label="Stats">
-                    <BarChart3 className="h-4 w-4" />
-                  </Button>
-                </Link>
-              </>
+              <ClubNav />
             )}
             <Link to="/settings">
               <Button variant="outline" size="icon" aria-label="Settings">
