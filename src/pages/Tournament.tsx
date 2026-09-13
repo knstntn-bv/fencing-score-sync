@@ -1,16 +1,43 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
+import { format } from "date-fns";
 import { ArrowLeft, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { ClubNav } from "@/components/ClubNav";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/context/AuthContext";
 import { useTournament } from "@/hooks/useTournament";
-import { TOURNAMENT_STATUS_LABEL } from "@/types/tournament";
+import { formatStandingPoints } from "@/lib/tournament/standings";
+import {
+  TOURNAMENT_FORMAT_LABEL,
+  TOURNAMENT_POINTS_SCHEME_LABEL,
+  TOURNAMENT_STATUS_LABEL,
+  type TournamentBout,
+  type TournamentFormat,
+  type TournamentPointsScheme,
+} from "@/types/tournament";
 import type { Fencer } from "@/types/fencing";
+import type { StandingRow } from "@/lib/tournament/standings";
+
+const LATER_FORMATS: TournamentFormat[] = ["playoff", "groups_playoff", "swiss", "king_of_hill"];
+const SCHEMES: TournamentPointsScheme[] = ["half", "binary", "football"];
 
 export default function TournamentPage() {
   const { configured } = useAuth();
@@ -58,6 +85,7 @@ export default function TournamentPage() {
   const event = tournament.tournament;
   const canEditCheckIn = event.status === "setup";
   const checkedCount = tournament.checkedInIds.size;
+  const fencerName = (fencerId: string | null) => nameFromRoster(tournament.roster, fencerId);
 
   return (
     <TournamentShell
@@ -82,7 +110,7 @@ export default function TournamentPage() {
         <p className="text-sm text-destructive mb-4">{tournament.error}</p>
       ) : null}
 
-      <section className="space-y-4">
+      <section className="space-y-4 mb-10">
         <div>
           <h2 className="text-lg font-medium">Check-in</h2>
           <p className="text-sm text-muted-foreground">
@@ -136,7 +164,340 @@ export default function TournamentPage() {
           <p className="text-sm text-muted-foreground">Check-in is locked for this event.</p>
         )}
       </section>
+
+      {event.status === "setup" && checkedCount >= 2 ? (
+        <SetupPanel tournament={tournament} />
+      ) : null}
+
+      {event.status === "live" || event.status === "done" ? (
+        <ConductingPanel
+          status={event.status}
+          queue={tournament.queue}
+          finishedBouts={tournament.finishedBouts}
+          standings={tournament.standings}
+          fencerName={fencerName}
+          finishing={tournament.finishEvent.isPending}
+          onFinish={async () => {
+            try {
+              await tournament.finishEvent.mutateAsync();
+              toast.success("Event finished");
+            } catch (error) {
+              toast.error(tournament.mutationError(error));
+            }
+          }}
+        />
+      ) : null}
     </TournamentShell>
+  );
+}
+
+function SetupPanel({
+  tournament,
+}: {
+  tournament: ReturnType<typeof useTournament>;
+}) {
+  const event = tournament.tournament;
+  const timeLimitSec = event?.timeLimitSec;
+  const pointsLimitValue = event?.pointsLimit;
+  const [timeLimit, setTimeLimit] = useState(timeLimitSec ?? 90);
+  const [pointsLimit, setPointsLimit] = useState(pointsLimitValue ?? 12);
+
+  useEffect(() => {
+    if (timeLimitSec != null) setTimeLimit(timeLimitSec);
+    if (pointsLimitValue != null) setPointsLimit(pointsLimitValue);
+  }, [timeLimitSec, pointsLimitValue]);
+
+  if (!event) return null;
+
+  const saveLimits = async (next: { timeLimitSec?: number; pointsLimit?: number }) => {
+    try {
+      await tournament.patch.mutateAsync(next);
+    } catch (error) {
+      toast.error(tournament.mutationError(error));
+    }
+  };
+
+  const canStart =
+    event.format === "round_robin" &&
+    Boolean(event.pointsScheme) &&
+    tournament.bouts.length === tournament.expectedBoutCount &&
+    tournament.expectedBoutCount > 0;
+
+  return (
+    <section className="space-y-6">
+      <div>
+        <h2 className="text-lg font-medium">Format</h2>
+        <p className="text-sm text-muted-foreground mb-3">
+          Round robin is available now. Other presets come later.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant={event.format === "round_robin" ? "default" : "outline"}
+            onClick={async () => {
+              try {
+                await tournament.patch.mutateAsync({ format: "round_robin" });
+              } catch (error) {
+                toast.error(tournament.mutationError(error));
+              }
+            }}
+          >
+            {TOURNAMENT_FORMAT_LABEL.round_robin}
+          </Button>
+          {LATER_FORMATS.map((item) => (
+            <Button key={item} type="button" variant="outline" disabled>
+              {TOURNAMENT_FORMAT_LABEL[item]}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <h2 className="text-lg font-medium">Points scheme</h2>
+        <p className="text-sm text-muted-foreground mb-3">
+          Loss / draw / win. Required before starting.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {SCHEMES.map((scheme) => (
+            <Button
+              key={scheme}
+              type="button"
+              variant={event.pointsScheme === scheme ? "default" : "outline"}
+              onClick={async () => {
+                try {
+                  await tournament.patch.mutateAsync({ pointsScheme: scheme });
+                } catch (error) {
+                  toast.error(tournament.mutationError(error));
+                }
+              }}
+            >
+              {TOURNAMENT_POINTS_SCHEME_LABEL[scheme]}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label>Bout time: {formatDuration(timeLimit)}</Label>
+          <Slider
+            value={[timeLimit]}
+            min={60}
+            max={300}
+            step={10}
+            onValueChange={(value) => setTimeLimit(value[0])}
+            onValueCommit={(value) => void saveLimits({ timeLimitSec: value[0] })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>First to: {pointsLimit} points</Label>
+          <Slider
+            value={[pointsLimit]}
+            min={5}
+            max={20}
+            step={1}
+            onValueChange={(value) => setPointsLimit(value[0])}
+            onValueCommit={(value) => void saveLimits({ pointsLimit: value[0] })}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-3">
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={tournament.draw.isPending}
+          onClick={async () => {
+            try {
+              await tournament.draw.mutateAsync();
+              toast.success("Bouts drawn");
+            } catch (error) {
+              toast.error(tournament.mutationError(error));
+            }
+          }}
+        >
+          {tournament.bouts.length > 0 ? "Draw again" : "Draw bouts"}
+        </Button>
+        <Button
+          type="button"
+          disabled={!canStart || tournament.startEvent.isPending}
+          onClick={async () => {
+            try {
+              await tournament.startEvent.mutateAsync();
+              toast.success("Event started");
+            } catch (error) {
+              toast.error(tournament.mutationError(error));
+            }
+          }}
+        >
+          Start event
+        </Button>
+      </div>
+
+      <p className="text-sm text-muted-foreground">
+        {tournament.bouts.length > 0
+          ? `${tournament.bouts.length} of ${tournament.expectedBoutCount} bouts ready.`
+          : "Draw the bouts, then start."}
+        {!event.pointsScheme ? " Choose a points scheme to start." : null}
+      </p>
+    </section>
+  );
+}
+
+function ConductingPanel({
+  status,
+  queue,
+  finishedBouts,
+  standings,
+  fencerName,
+  finishing,
+  onFinish,
+}: {
+  status: "live" | "done";
+  queue: TournamentBout[];
+  finishedBouts: TournamentBout[];
+  standings: StandingRow[];
+  fencerName: (id: string | null) => string;
+  finishing: boolean;
+  onFinish: () => Promise<void>;
+}) {
+  const live = status === "live";
+  const defaultTab = live ? "queue" : "table";
+
+  return (
+    <section className="space-y-4">
+      <Tabs key={defaultTab} defaultValue={defaultTab}>
+        <TabsList className={`grid w-full ${live ? "grid-cols-3" : "grid-cols-2"}`}>
+          {live ? <TabsTrigger value="queue">Queue</TabsTrigger> : null}
+          <TabsTrigger value="table">Table</TabsTrigger>
+          <TabsTrigger value="bouts">Bouts</TabsTrigger>
+        </TabsList>
+
+        {live ? (
+          <TabsContent value="queue" className="space-y-3">
+            {queue.length === 0 ? (
+              <p className="text-muted-foreground">No bouts left in the queue.</p>
+            ) : (
+              <ul className="space-y-3">
+                {queue.map((bout) => (
+                  <li key={bout.id}>
+                    <Card>
+                      <CardContent className="p-4 flex items-center justify-between gap-3">
+                        <p className="min-w-0">
+                          <span className="text-fencer-blue font-medium">
+                            {fencerName(bout.blueFencerId)}
+                          </span>
+                          <span className="text-muted-foreground"> vs </span>
+                          <span className="text-fencer-red font-medium">
+                            {fencerName(bout.redFencerId)}
+                          </span>
+                        </p>
+                        <Button asChild size="sm">
+                          <Link to={`/?t=${bout.tournamentId}&b=${bout.id}`}>Start</Link>
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </TabsContent>
+        ) : null}
+
+        <TabsContent value="table" className="space-y-3">
+          {standings.length === 0 ? (
+            <p className="text-muted-foreground">Standings appear after bouts are saved.</p>
+          ) : (
+            <ul className="space-y-3">
+              {standings.map((row) => (
+                <li key={row.fencerId}>
+                  <Card>
+                    <CardContent className="p-4 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{row.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {formatStandingPoints(row.points)} pts · {row.bouts}{" "}
+                          {row.bouts === 1 ? "bout" : "bouts"}
+                        </p>
+                      </div>
+                      <p className="font-mono tabular-nums text-sm shrink-0">
+                        <span className="text-emerald-500">+{row.scored}</span>
+                        <span className="text-muted-foreground"> / </span>
+                        <span className="text-red-500">-{row.received}</span>
+                      </p>
+                    </CardContent>
+                  </Card>
+                </li>
+              ))}
+            </ul>
+          )}
+        </TabsContent>
+
+        <TabsContent value="bouts" className="space-y-3">
+          {finishedBouts.length === 0 ? (
+            <p className="text-muted-foreground">No bouts saved yet.</p>
+          ) : (
+            <ul className="space-y-3">
+              {finishedBouts.map((bout) => (
+                <li key={bout.id}>
+                  <FinishedBoutRow bout={bout} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {live ? (
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="outline" disabled={finishing}>
+              Finish event
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Finish this event?</AlertDialogTitle>
+              <AlertDialogDescription>
+                The queue closes. Standings keep whatever bouts are already saved.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={() => void onFinish()}>Finish event</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
+    </section>
+  );
+}
+
+function FinishedBoutRow({ bout }: { bout: TournamentBout }) {
+  const outcome =
+    bout.blueResult === "draw"
+      ? "Draw"
+      : bout.blueResult === "win"
+        ? `${bout.blueName} won`
+        : `${bout.redName} won`;
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-2">
+        {bout.finishedAt ? (
+          <p className="text-xs text-muted-foreground">
+            {format(new Date(bout.finishedAt), "d MMM yyyy, HH:mm")}
+          </p>
+        ) : null}
+        <div className="flex items-center justify-between gap-3 text-lg font-medium">
+          <span className="text-fencer-blue min-w-0 truncate">{bout.blueName}</span>
+          <span className="font-mono tabular-nums shrink-0">
+            {bout.blueScore} – {bout.redScore}
+          </span>
+          <span className="text-fencer-red min-w-0 truncate text-right">{bout.redName}</span>
+        </div>
+        <p className="text-sm text-muted-foreground">{outcome}</p>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -277,4 +638,22 @@ function CheckInRow({
       </CardContent>
     </Card>
   );
+}
+
+function nameFromRoster(
+  roster: { active: Fencer[]; archived: Fencer[] },
+  fencerId: string | null
+): string {
+  if (!fencerId) return "TBD";
+  return (
+    roster.active.find((fencer) => fencer.id === fencerId)?.name ??
+    roster.archived.find((fencer) => fencer.id === fencerId)?.name ??
+    "Unknown"
+  );
+}
+
+function formatDuration(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const remaining = seconds % 60;
+  return `${minutes}:${remaining.toString().padStart(2, "0")}`;
 }
