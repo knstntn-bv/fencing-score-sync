@@ -1,9 +1,10 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { Settings } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { ClubNav } from "@/components/ClubNav";
+import { TournamentScoreboardBar } from "@/components/TournamentScoreboardBar";
 import { Button } from "@/components/ui/button";
 import ScoreDisplay from "@/components/ScoreDisplay";
 import Timer from "@/components/Timer";
@@ -17,10 +18,17 @@ import { boutSelectionMessage, resolveBoutSelection } from "@/lib/boutSelection"
 import { nextWinnerState, scoreLeader, scoreResults } from "@/lib/boutOutcome";
 import { fencerErrorMessage } from "@/lib/fencers";
 import { MATCHES_QUERY_KEY } from "@/hooks/useMatches";
+import {
+  TOURNAMENT_BOUTS_QUERY_KEY,
+  TOURNAMENT_QUERY_KEY,
+  useTournamentSlot,
+} from "@/hooks/useTournament";
 import { useMatchOutboxCount } from "@/hooks/useMatchOutbox";
 import { enqueueMatchOutbox } from "@/lib/matchOutbox";
 import { newMatchId, saveMatch } from "@/lib/matches";
 import { isNetworkError } from "@/lib/networkError";
+import { saveTournamentBout } from "@/lib/tournamentBouts";
+import { tournamentErrorMessage } from "@/lib/tournaments";
 import type { Fencer } from "@/types/fencing";
 
 interface IndexProps {
@@ -36,6 +44,14 @@ const Index = ({ settings }: IndexProps) => {
   const { active } = useFencers();
   const queryClient = useQueryClient();
   const pendingUploads = useMatchOutboxCount(clubId ?? undefined);
+  const [params] = useSearchParams();
+  const slot = useTournamentSlot(params.get("t"), params.get("b"));
+  const tournamentSlot = Boolean(params.get("t") && params.get("b")) && !guestScoreboard;
+  const timeLimit = slot.tournament?.timeLimitSec ?? settings.timeLimit;
+  const pointsLimit = slot.tournament?.pointsLimit ?? settings.pointsLimit;
+  const slotBoutId = slot.bout?.id ?? null;
+  const slotFinishedAt = slot.bout?.finishedAt ?? null;
+  const eventLive = slot.tournament?.status === "live";
   const [player1Score, setPlayer1Score] = useState(0);
   const [player2Score, setPlayer2Score] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
@@ -50,12 +66,17 @@ const Index = ({ settings }: IndexProps) => {
   const [redNameSnap, setRedNameSnap] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const hydratedSlotKey = useRef<string | null>(null);
 
   const selection = resolveBoutSelection(blueFencerId, redFencerId);
-  const selectionHint = boutSelectionMessage(selection);
-  const namedBout = !guestScoreboard && selection.status === "ok" && selection.mode === "named";
-  const canStartTimer = selection.status === "ok" && !winner;
-  const namesLocked = hasMatchStarted || winner !== null;
+  const selectionHint = tournamentSlot ? null : boutSelectionMessage(selection);
+  const namedBout = tournamentSlot
+    ? Boolean(slot.bout?.blueFencerId && slot.bout?.redFencerId)
+    : !guestScoreboard && selection.status === "ok" && selection.mode === "named";
+  const canStartTimer = tournamentSlot
+    ? namedBout && eventLive && !winner && !slotFinishedAt
+    : selection.status === "ok" && !winner;
+  const namesLocked = hasMatchStarted || winner !== null || Boolean(slot.bout);
 
   const liveBlueName = fencerName(active, blueFencerId, "Fencer 1");
   const liveRedName = fencerName(active, redFencerId, "Fencer 2");
@@ -65,7 +86,7 @@ const Index = ({ settings }: IndexProps) => {
   const applyScores = (blueScore: number, redScore: number) => {
     setPlayer1Score(blueScore);
     setPlayer2Score(redScore);
-    setWinner((current) => nextWinnerState(current, blueScore, redScore, settings.pointsLimit));
+    setWinner((current) => nextWinnerState(current, blueScore, redScore, pointsLimit));
   };
 
   const incrementPlayer1 = () => applyScores(player1Score + 1, player2Score);
@@ -87,7 +108,40 @@ const Index = ({ settings }: IndexProps) => {
     }
   };
 
+  useEffect(() => {
+    if (!tournamentSlot || !slotBoutId || !slot.bout) {
+      hydratedSlotKey.current = null;
+      return;
+    }
+    const key = `${slotBoutId}:${slotFinishedAt ?? ""}`;
+    if (hydratedSlotKey.current === key) return;
+    hydratedSlotKey.current = key;
+    setBlueFencerId(slot.bout.blueFencerId);
+    setRedFencerId(slot.bout.redFencerId);
+    setIsTimerRunning(false);
+    setWinner(null);
+    setStartedAt(null);
+    setTimerResetId((id) => id + 1);
+    setRemainingSec(slot.tournament?.timeLimitSec ?? settings.timeLimit);
+    if (slot.bout.finishedAt) {
+      setPlayer1Score(slot.bout.blueScore ?? 0);
+      setPlayer2Score(slot.bout.redScore ?? 0);
+      setSaved(true);
+      setBlueNameSnap(slot.bout.blueName);
+      setRedNameSnap(slot.bout.redName);
+      setHasMatchStarted(true);
+    } else {
+      setPlayer1Score(0);
+      setPlayer2Score(0);
+      setSaved(false);
+      setBlueNameSnap(null);
+      setRedNameSnap(null);
+      setHasMatchStarted(false);
+    }
+  }, [tournamentSlot, slotBoutId, slotFinishedAt, slot.bout, slot.tournament?.timeLimitSec, settings.timeLimit]);
+
   const handleReset = () => {
+    if (slot.bout?.finishedAt) return;
     setPlayer1Score(0);
     setPlayer2Score(0);
     setHasMatchStarted(false);
@@ -101,8 +155,61 @@ const Index = ({ settings }: IndexProps) => {
   };
 
   const handleSave = async () => {
-    if (!namedBout || selection.status !== "ok" || selection.mode !== "named") return;
-    if (!user || !clubId || isTimerRunning || saved || saving) return;
+    if (!namedBout || isTimerRunning || saved || saving) return;
+    if (!user || !clubId) return;
+
+    if (tournamentSlot) {
+      if (!slot.bout || !slot.tournament || !slot.bout.blueFencerId || !slot.bout.redFencerId) return;
+      if (slot.tournament.status !== "live") {
+        toast.error("This event is not in progress.");
+        return;
+      }
+      if (slot.bout.finishedAt) return;
+      if (!navigator.onLine) {
+        toast.error("Need a network connection to save a tournament bout.");
+        return;
+      }
+      setSaving(true);
+      const { blueResult, redResult } = scoreResults(player1Score, player2Score);
+      try {
+        await saveTournamentBout({
+          id: slot.bout.id,
+          blueFencerId: slot.bout.blueFencerId,
+          redFencerId: slot.bout.redFencerId,
+          blueName,
+          redName,
+          blueScore: player1Score,
+          redScore: player2Score,
+          blueResult,
+          redResult,
+          timeLimitSec: timeLimit,
+          pointsLimit,
+          remainingSec,
+          startedAt: startedAt ?? new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+        });
+        await queryClient.invalidateQueries({
+          queryKey: [...TOURNAMENT_BOUTS_QUERY_KEY, slot.tournament.id],
+        });
+        await queryClient.invalidateQueries({
+          queryKey: [...TOURNAMENT_BOUTS_QUERY_KEY, "slot", slot.bout.id],
+        });
+        await queryClient.invalidateQueries({ queryKey: [...TOURNAMENT_QUERY_KEY, slot.tournament.id] });
+        setSaved(true);
+        toast.success(blueResult === "draw" ? "Draw saved" : "Victory saved");
+      } catch (error) {
+        toast.error(
+          isNetworkError(error)
+            ? "Need a network connection to save a tournament bout."
+            : tournamentErrorMessage(error, "Could not save the bout.")
+        );
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    if (selection.status !== "ok" || selection.mode !== "named") return;
 
     setSaving(true);
     const { blueResult, redResult } = scoreResults(player1Score, player2Score);
@@ -172,6 +279,16 @@ const Index = ({ settings }: IndexProps) => {
           <h1 className="text-4xl font-display font-bold text-primary text-center">
             Fencing Scorer
           </h1>
+          {slot.tournament ? (
+            <div className="mt-4">
+              <TournamentScoreboardBar name={slot.tournament.name} tournamentId={slot.tournament.id} />
+            </div>
+          ) : null}
+          {tournamentSlot && slot.notFound ? (
+            <p className="text-sm text-destructive text-center mt-2">
+              This tournament bout was not found.
+            </p>
+          ) : null}
         </div>
 
         <div className="grid grid-cols-2 gap-4 md:gap-8 max-w-4xl mx-auto mb-8">
@@ -222,8 +339,8 @@ const Index = ({ settings }: IndexProps) => {
 
         <div className="flex justify-center mb-4">
           <Timer
-            key={`timer-${timerResetId}-${settings.timeLimit}`}
-            initialMinutes={settings.timeLimit / 60}
+            key={`timer-${timerResetId}-${timeLimit}-${slot.bout?.id ?? "club"}`}
+            initialMinutes={timeLimit / 60}
             canStart={canStartTimer}
             onStateChange={handleTimerStateChange}
             onRemainingChange={setRemainingSec}
@@ -241,7 +358,7 @@ const Index = ({ settings }: IndexProps) => {
               onSave={() => void handleSave()}
             />
           )}
-          <HoldResetButton disabled={isTimerRunning} onReset={handleReset} />
+          <HoldResetButton disabled={isTimerRunning || Boolean(slot.bout?.finishedAt)} onReset={handleReset} />
         </div>
 
         <div className="text-center mt-4 space-y-1">
@@ -255,9 +372,9 @@ const Index = ({ settings }: IndexProps) => {
           <div className="text-sm text-muted-foreground">
             {winnerLabel
               ? `${winnerLabel} won — timer stays paused`
-              : `First to ${settings.pointsLimit} points wins`}
+              : `First to ${pointsLimit} points wins`}
           </div>
-          {guestScoreboard || pendingUploads === 0 ? null : (
+          {guestScoreboard || tournamentSlot || pendingUploads === 0 ? null : (
             <div className="text-sm text-muted-foreground">
               {pendingUploads === 1
                 ? "1 bout will upload when you're online."

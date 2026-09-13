@@ -1,6 +1,6 @@
 import { format } from "date-fns";
 import type { Database } from "@/types/database";
-import type { Tournament, TournamentParticipant } from "@/types/tournament";
+import type { Tournament, TournamentFormat, TournamentParticipant, TournamentPointsScheme, TournamentStatus } from "@/types/tournament";
 import { requireSupabase } from "@/lib/supabase";
 
 type TournamentRow = Database["public"]["Tables"]["tournaments"]["Row"];
@@ -157,4 +157,36 @@ export async function removeParticipant(tournamentId: string, fencerId: string):
     .eq("fencer_id", fencerId);
 
   if (error) throw error;
+}
+
+export async function updateTournament(
+  id: string,
+  patch: {
+    format?: TournamentFormat | null;
+    pointsScheme?: TournamentPointsScheme | null;
+    timeLimitSec?: number;
+    pointsLimit?: number;
+    status?: TournamentStatus;
+    liveAt?: string | null;
+    finishedAt?: string | null;
+  }
+): Promise<Tournament> {
+  const payload: Database["public"]["Tables"]["tournaments"]["Update"] = {};
+  if (patch.format !== undefined) payload.format = patch.format;
+  if (patch.pointsScheme !== undefined) payload.points_scheme = patch.pointsScheme;
+  if (patch.timeLimitSec !== undefined) payload.time_limit_sec = patch.timeLimitSec;
+  if (patch.pointsLimit !== undefined) payload.points_limit = patch.pointsLimit;
+  if (patch.status !== undefined) payload.status = patch.status;
+  if (patch.liveAt !== undefined) payload.live_at = patch.liveAt;
+  if (patch.finishedAt !== undefined) payload.finished_at = patch.finishedAt;
+
+  const { data, error } = await requireSupabase()
+    .from("tournaments")
+    .update(payload)
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return mapTournament(data);
 }

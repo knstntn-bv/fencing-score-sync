@@ -46,3 +46,40 @@ export const TOURNAMENT_FORMAT_LABEL: Record<TournamentFormat, string> = {
   swiss: "Swiss",
   king_of_hill: "King of the hill",
 };
+
+export const TOURNAMENT_POINTS_SCHEME_LABEL: Record<TournamentPointsScheme, string> = {
+  half: "0 / 0.5 / 1",
+  binary: "0 / 0 / 1",
+  football: "0 / 1 / 3",
+};
+
+export type TournamentBoutStage = "rr" | "group" | "swiss" | "playoff" | "koth";
+
+export type TournamentBout = {
+  id: string;
+  tournamentId: string;
+  clubId: string;
+  stage: TournamentBoutStage;
+  groupNo: number | null;
+  roundCode: string | null;
+  sortOrder: number;
+  blueFencerId: string | null;
+  redFencerId: string | null;
+  bluePlaceholder: string | null;
+  redPlaceholder: string | null;
+  winnerNextId: string | null;
+  loserNextId: string | null;
+  blueName: string | null;
+  redName: string | null;
+  blueScore: number | null;
+  redScore: number | null;
+  blueResult: "win" | "lose" | "draw" | null;
+  redResult: "win" | "lose" | "draw" | null;
+  timeLimitSec: number | null;
+  pointsLimit: number | null;
+  remainingSec: number | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+  kothKingId: string | null;
+};
