@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { ArrowLeft, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { ClubNav } from "@/components/ClubNav";
+import { CutoffTieDialog } from "@/components/CutoffTieDialog";
 import { OverrideBoutDialog } from "@/components/OverrideBoutDialog";
 import { PlayoffBracket } from "@/components/PlayoffBracket";
 import {
@@ -27,6 +28,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/context/AuthContext";
 import { useTournament } from "@/hooks/useTournament";
 import { formatStandingPoints } from "@/lib/tournament/standings";
+import {
+  defaultGroupOption,
+  GROUP_COUNTS,
+  groupsPlayoffReadyToStart,
+  groupTitle,
+  validGroupOptions,
+} from "@/lib/tournament/groups";
 import { isPlayoffSize, playoffReadyToStart } from "@/lib/tournament/playoff";
 import {
   TOURNAMENT_FORMAT_LABEL,
@@ -39,7 +47,7 @@ import {
 import type { Fencer } from "@/types/fencing";
 import type { StandingRow } from "@/lib/tournament/standings";
 
-const LATER_FORMATS: TournamentFormat[] = ["groups_playoff", "swiss", "king_of_hill"];
+const LATER_FORMATS: TournamentFormat[] = ["swiss", "king_of_hill"];
 const SCHEMES: TournamentPointsScheme[] = ["half", "binary", "football"];
 
 export default function TournamentPage() {
@@ -180,6 +188,13 @@ export default function TournamentPage() {
           queue={tournament.queue}
           finishedBouts={tournament.finishedBouts}
           standings={tournament.standings}
+          groupTables={tournament.groupTables}
+          cutoffTie={tournament.cutoffTies[0] ?? null}
+          resolvingId={
+            tournament.resolveCutoff.isPending
+              ? tournament.resolveCutoff.variables?.fencerId
+              : undefined
+          }
           fencerName={fencerName}
           finishing={tournament.finishEvent.isPending}
           overridingId={
@@ -192,6 +207,14 @@ export default function TournamentPage() {
             } catch (error) {
               toast.error(tournament.mutationError(error));
               throw error;
+            }
+          }}
+          onResolveCutoff={async (input) => {
+            try {
+              await tournament.resolveCutoff.mutateAsync(input);
+              toast.success("Advancer picked");
+            } catch (error) {
+              toast.error(tournament.mutationError(error));
             }
           }}
           onFinish={async () => {
@@ -235,20 +258,32 @@ function SetupPanel({
   };
 
   const playoffOk = isPlayoffSize(tournament.checkedInIds.size);
+  const groupOptions = validGroupOptions(tournament.checkedInIds.size);
+  const groupsOk = groupOptions.length > 0;
   const canStart =
     event.format === "playoff"
       ? playoffReadyToStart(tournament.bouts)
-      : event.format === "round_robin" &&
-        Boolean(event.pointsScheme) &&
-        tournament.bouts.length === tournament.expectedBoutCount &&
-        tournament.expectedBoutCount > 0;
+      : event.format === "groups_playoff"
+        ? Boolean(event.pointsScheme) &&
+          event.groupCount != null &&
+          event.advancersPerGroup != null &&
+          groupsPlayoffReadyToStart(
+            tournament.bouts,
+            tournament.participants,
+            event.groupCount,
+            event.advancersPerGroup
+          )
+        : event.format === "round_robin" &&
+          Boolean(event.pointsScheme) &&
+          tournament.bouts.length === tournament.expectedBoutCount &&
+          tournament.expectedBoutCount > 0;
 
   return (
     <section className="space-y-6">
       <div>
         <h2 className="text-lg font-medium">Format</h2>
         <p className="text-sm text-muted-foreground mb-3">
-          Round robin and playoff are available now. Other presets come later.
+          Round robin, playoff, and groups + playoff are available now. Other presets come later.
         </p>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -256,7 +291,11 @@ function SetupPanel({
             variant={event.format === "round_robin" ? "default" : "outline"}
             onClick={async () => {
               try {
-                await tournament.patch.mutateAsync({ format: "round_robin" });
+                await tournament.patch.mutateAsync({
+                  format: "round_robin",
+                  groupCount: null,
+                  advancersPerGroup: null,
+                });
               } catch (error) {
                 toast.error(tournament.mutationError(error));
               }
@@ -271,13 +310,43 @@ function SetupPanel({
             title={playoffOk ? undefined : "Playoff needs 2, 4, 8, 16, or 32 fencers."}
             onClick={async () => {
               try {
-                await tournament.patch.mutateAsync({ format: "playoff" });
+                await tournament.patch.mutateAsync({
+                  format: "playoff",
+                  groupCount: null,
+                  advancersPerGroup: null,
+                });
               } catch (error) {
                 toast.error(tournament.mutationError(error));
               }
             }}
           >
             {TOURNAMENT_FORMAT_LABEL.playoff}
+          </Button>
+          <Button
+            type="button"
+            variant={event.format === "groups_playoff" ? "default" : "outline"}
+            disabled={!groupsOk}
+            title={
+              groupsOk
+                ? undefined
+                : "Groups + playoff needs enough fencers for 2, 4, or 8 groups with a power-of-two playoff."
+            }
+            onClick={async () => {
+              if (event.format === "groups_playoff") return;
+              const option = defaultGroupOption(tournament.checkedInIds.size);
+              if (!option) return;
+              try {
+                await tournament.patch.mutateAsync({
+                  format: "groups_playoff",
+                  groupCount: option.groupCount,
+                  advancersPerGroup: option.advancers,
+                });
+              } catch (error) {
+                toast.error(tournament.mutationError(error));
+              }
+            }}
+          >
+            {TOURNAMENT_FORMAT_LABEL.groups_playoff}
           </Button>
           {LATER_FORMATS.map((item) => (
             <Button key={item} type="button" variant="outline" disabled>
@@ -290,7 +359,82 @@ function SetupPanel({
             Playoff needs 2, 4, 8, 16, or 32 fencers.
           </p>
         ) : null}
+        {!groupsOk ? (
+          <p className="text-sm text-muted-foreground mt-2">
+            Groups + playoff needs 2, 4, or 8 groups and a playoff of 2, 4, 8, 16, or 32.
+          </p>
+        ) : null}
       </div>
+
+      {event.format === "groups_playoff" ? (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-medium">Groups</h2>
+            <p className="text-sm text-muted-foreground mb-3">
+              Advancers times groups must be 2, 4, 8, 16, or 32. Uneven group sizes are fine.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {GROUP_COUNTS.filter((count) =>
+                groupOptions.some((option) => option.groupCount === count)
+              ).map((count) => (
+                <Button
+                  key={count}
+                  type="button"
+                  variant={event.groupCount === count ? "default" : "outline"}
+                  onClick={async () => {
+                    const forCount = groupOptions.filter((option) => option.groupCount === count);
+                    const keepQ = forCount.some((option) => option.advancers === event.advancersPerGroup);
+                    const advancers = keepQ
+                      ? event.advancersPerGroup
+                      : (forCount.find((option) => option.advancers === 2)?.advancers ??
+                        forCount[0]?.advancers);
+                    if (advancers == null) return;
+                    try {
+                      await tournament.patch.mutateAsync({
+                        groupCount: count,
+                        advancersPerGroup: advancers,
+                      });
+                    } catch (error) {
+                      toast.error(tournament.mutationError(error));
+                    }
+                  }}
+                >
+                  {count} groups
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <h2 className="text-lg font-medium">Advancers per group</h2>
+            <p className="text-sm text-muted-foreground mb-3">
+              Same number from every group. Firsts are spread across playoff halves.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {groupOptions
+                .filter((option) => option.groupCount === (event.groupCount ?? groupOptions[0]?.groupCount))
+                .map((option) => (
+                  <Button
+                    key={option.advancers}
+                    type="button"
+                    variant={event.advancersPerGroup === option.advancers ? "default" : "outline"}
+                    onClick={async () => {
+                      try {
+                        await tournament.patch.mutateAsync({
+                          groupCount: option.groupCount,
+                          advancersPerGroup: option.advancers,
+                        });
+                      } catch (error) {
+                        toast.error(tournament.mutationError(error));
+                      }
+                    }}
+                  >
+                    {option.advancers}
+                  </Button>
+                ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {event.format === "playoff" ? null : (
       <div>
@@ -383,6 +527,9 @@ function SetupPanel({
         {event.format === "round_robin" && !event.pointsScheme
           ? " Choose a points scheme to start."
           : null}
+        {event.format === "groups_playoff" && !event.pointsScheme
+          ? " Choose a points scheme to start."
+          : null}
       </p>
     </section>
   );
@@ -395,10 +542,14 @@ function ConductingPanel({
   queue,
   finishedBouts,
   standings,
+  groupTables,
+  cutoffTie,
+  resolvingId,
   fencerName,
   finishing,
   overridingId,
   onOverride,
+  onResolveCutoff,
   onFinish,
 }: {
   status: "live" | "done";
@@ -407,17 +558,35 @@ function ConductingPanel({
   queue: TournamentBout[];
   finishedBouts: TournamentBout[];
   standings: StandingRow[];
+  groupTables: { groupNo: number; standings: StandingRow[] }[];
+  cutoffTie: { groupNo: number; remaining: number; candidates: StandingRow[] } | null;
+  resolvingId?: string;
   fencerName: (id: string | null) => string;
   finishing: boolean;
   overridingId?: string;
   onOverride: (input: { id: string; blueScore: number; redScore: number }) => Promise<void>;
+  onResolveCutoff: (input: { groupNo: number; fencerId: string }) => Promise<void>;
   onFinish: () => Promise<void>;
 }) {
   const live = status === "live";
   const defaultTab = live ? "queue" : "table";
+  const groupQueue = groupTables.map((table) => ({
+    groupNo: table.groupNo,
+    bouts: queue.filter((bout) => bout.stage === "group" && bout.groupNo === table.groupNo),
+  }));
+  const hasGroupQueue = groupQueue.some((group) => group.bouts.length > 0);
 
   return (
     <section className="space-y-4">
+      {cutoffTie ? (
+        <CutoffTieDialog
+          groupNo={cutoffTie.groupNo}
+          remaining={cutoffTie.remaining}
+          candidates={cutoffTie.candidates}
+          savingId={resolvingId}
+          onPick={(fencerId) => onResolveCutoff({ groupNo: cutoffTie.groupNo, fencerId })}
+        />
+      ) : null}
       <Tabs key={defaultTab} defaultValue={defaultTab}>
         <TabsList className={`grid w-full ${live ? "grid-cols-3" : "grid-cols-2"}`}>
           {live ? <TabsTrigger value="queue">Queue</TabsTrigger> : null}
@@ -426,31 +595,41 @@ function ConductingPanel({
         </TabsList>
 
         {live ? (
-          <TabsContent value="queue" className="space-y-3">
+          <TabsContent value="queue" className="space-y-6">
             {format === "playoff" ? (
               <PlayoffBracket bouts={bouts} fencerName={fencerName} showStart />
+            ) : format === "groups_playoff" ? (
+              <>
+                {hasGroupQueue
+                  ? groupQueue.map((group) =>
+                      group.bouts.length === 0 ? null : (
+                        <div key={group.groupNo} className="space-y-3">
+                          <h3 className="text-sm font-medium text-muted-foreground">
+                            {groupTitle(group.groupNo)}
+                          </h3>
+                          <ul className="space-y-3">
+                            {group.bouts.map((bout) => (
+                              <li key={bout.id}>
+                                <GroupQueueCard bout={bout} fencerName={fencerName} />
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )
+                    )
+                  : null}
+                <PlayoffBracket bouts={bouts} fencerName={fencerName} showStart />
+                {!hasGroupQueue && queue.filter((bout) => bout.stage === "playoff").length === 0 ? (
+                  <p className="text-muted-foreground">No bouts left in the queue.</p>
+                ) : null}
+              </>
             ) : queue.length === 0 ? (
               <p className="text-muted-foreground">No bouts left in the queue.</p>
             ) : (
               <ul className="space-y-3">
                 {queue.map((bout) => (
                   <li key={bout.id}>
-                    <Card>
-                      <CardContent className="p-4 flex items-center justify-between gap-3">
-                        <p className="min-w-0">
-                          <span className="text-fencer-blue font-medium">
-                            {fencerName(bout.blueFencerId)}
-                          </span>
-                          <span className="text-muted-foreground"> vs </span>
-                          <span className="text-fencer-red font-medium">
-                            {fencerName(bout.redFencerId)}
-                          </span>
-                        </p>
-                        <Button asChild size="sm">
-                          <Link to={`/?t=${bout.tournamentId}&b=${bout.id}`}>Start</Link>
-                        </Button>
-                      </CardContent>
-                    </Card>
+                    <GroupQueueCard bout={bout} fencerName={fencerName} />
                   </li>
                 ))}
               </ul>
@@ -458,34 +637,29 @@ function ConductingPanel({
           </TabsContent>
         ) : null}
 
-        <TabsContent value="table" className="space-y-3">
+        <TabsContent value="table" className="space-y-6">
           {format === "playoff" ? (
             <PlayoffBracket bouts={bouts} fencerName={fencerName} showStart={false} />
+          ) : format === "groups_playoff" ? (
+            <>
+              {groupTables.map((table) => (
+                <div key={table.groupNo} className="space-y-3">
+                  <h3 className="text-sm font-medium text-muted-foreground">
+                    {groupTitle(table.groupNo)}
+                  </h3>
+                  {table.standings.length === 0 ? (
+                    <p className="text-muted-foreground">Standings appear after bouts are saved.</p>
+                  ) : (
+                    <StandingsList rows={table.standings} />
+                  )}
+                </div>
+              ))}
+              <PlayoffBracket bouts={bouts} fencerName={fencerName} showStart={false} />
+            </>
           ) : standings.length === 0 ? (
             <p className="text-muted-foreground">Standings appear after bouts are saved.</p>
           ) : (
-            <ul className="space-y-3">
-              {standings.map((row) => (
-                <li key={row.fencerId}>
-                  <Card>
-                    <CardContent className="p-4 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-medium truncate">{row.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {formatStandingPoints(row.points)} pts · {row.bouts}{" "}
-                          {row.bouts === 1 ? "bout" : "bouts"}
-                        </p>
-                      </div>
-                      <p className="font-mono tabular-nums text-sm shrink-0">
-                        <span className="text-emerald-500">+{row.scored}</span>
-                        <span className="text-muted-foreground"> / </span>
-                        <span className="text-red-500">-{row.received}</span>
-                      </p>
-                    </CardContent>
-                  </Card>
-                </li>
-              ))}
-            </ul>
+            <StandingsList rows={standings} />
           )}
         </TabsContent>
 
@@ -535,6 +709,56 @@ function ConductingPanel({
         </AlertDialog>
       ) : null}
     </section>
+  );
+}
+
+function GroupQueueCard({
+  bout,
+  fencerName,
+}: {
+  bout: TournamentBout;
+  fencerName: (id: string | null) => string;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-4 flex items-center justify-between gap-3">
+        <p className="min-w-0">
+          <span className="text-fencer-blue font-medium">{fencerName(bout.blueFencerId)}</span>
+          <span className="text-muted-foreground"> vs </span>
+          <span className="text-fencer-red font-medium">{fencerName(bout.redFencerId)}</span>
+        </p>
+        <Button asChild size="sm">
+          <Link to={`/?t=${bout.tournamentId}&b=${bout.id}`}>Start</Link>
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function StandingsList({ rows }: { rows: StandingRow[] }) {
+  return (
+    <ul className="space-y-3">
+      {rows.map((row) => (
+        <li key={row.fencerId}>
+          <Card>
+            <CardContent className="p-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-medium truncate">{row.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {formatStandingPoints(row.points)} pts · {row.bouts}{" "}
+                  {row.bouts === 1 ? "bout" : "bouts"}
+                </p>
+              </div>
+              <p className="font-mono tabular-nums text-sm shrink-0">
+                <span className="text-emerald-500">+{row.scored}</span>
+                <span className="text-muted-foreground"> / </span>
+                <span className="text-red-500">-{row.received}</span>
+              </p>
+            </CardContent>
+          </Card>
+        </li>
+      ))}
+    </ul>
   );
 }
 

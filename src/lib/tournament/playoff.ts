@@ -27,6 +27,8 @@ export type PlayoffDraft = {
   sortOrder: number;
   blueFencerId: string | null;
   redFencerId: string | null;
+  bluePlaceholder: string | null;
+  redPlaceholder: string | null;
   winnerNextId: string | null;
   loserNextId: string | null;
 };
@@ -58,41 +60,54 @@ function makeSlot(roundCode: PlayoffRoundCode, newId: () => string): PlayoffDraf
     sortOrder: 0,
     blueFencerId: null,
     redFencerId: null,
+    bluePlaceholder: null,
+    redPlaceholder: null,
     winnerNextId: null,
     loserNextId: null,
   };
 }
 
-function wireWinners(from: PlayoffDraft[], to: PlayoffDraft[]): void {
-  from.forEach((bout, index) => {
-    bout.winnerNextId = to[Math.floor(index / 2)].id;
-  });
-}
-
-function wireLosers(from: PlayoffDraft[], to: PlayoffDraft[]): void {
-  from.forEach((bout) => {
-    bout.loserNextId = to[0].id;
-  });
-}
-
-/** Full single-elim tree. Bronze when n ≥ 4. First round has both ids. */
-export function drawPlayoff(
-  fencerIds: string[],
-  random: () => number = Math.random,
-  newId: () => string = () => crypto.randomUUID()
-): PlayoffDraft[] {
-  const unique = [...new Set(fencerIds)];
-  const n = unique.length;
-  if (!isPlayoffSize(n)) return [];
-
-  const shuffled = shuffle(unique, random);
+function elimCodesForSize(n: number): PlayoffRoundCode[] {
   const elimCodes: PlayoffRoundCode[] = [];
   if (n >= 32) elimCodes.push("r32");
   if (n >= 16) elimCodes.push("r16");
   if (n >= 8) elimCodes.push("qf");
   if (n >= 4) elimCodes.push("sf");
   if (n === 2) elimCodes.push("final");
+  return elimCodes;
+}
 
+function assignSortOrder(rounds: PlayoffDraft[][], sortOffset: number): PlayoffDraft[] {
+  const byRound = new Map<PlayoffRoundCode, PlayoffDraft[]>();
+  for (const row of rounds) {
+    for (const bout of row) {
+      const list = byRound.get(bout.roundCode) ?? [];
+      list.push(bout);
+      byRound.set(bout.roundCode, list);
+    }
+  }
+
+  let sortOrder = sortOffset;
+  const ordered: PlayoffDraft[] = [];
+  for (const code of PLAYOFF_ROUND_ORDER) {
+    for (const bout of byRound.get(code) ?? []) {
+      bout.sortOrder = sortOrder;
+      sortOrder += 1;
+      ordered.push(bout);
+    }
+  }
+  return ordered;
+}
+
+/** Empty single-elim tree. Bronze when n ≥ 4. First round has no ids. */
+export function buildPlayoffTree(
+  n: number,
+  newId: () => string = () => crypto.randomUUID(),
+  sortOffset = 0
+): PlayoffDraft[] {
+  if (!isPlayoffSize(n)) return [];
+
+  const elimCodes = elimCodesForSize(n);
   const rounds: PlayoffDraft[][] = [];
   let count = n / 2;
   for (const code of elimCodes) {
@@ -115,7 +130,42 @@ export function drawPlayoff(
     rounds.push(bronze, final);
   }
 
-  const first = rounds[0];
+  return assignSortOrder(rounds, sortOffset);
+}
+
+export function firstPlayoffRound(bouts: TournamentBout[]): TournamentBout[] {
+  const tree = bouts.filter((bout) => bout.stage === "playoff");
+  const firstCode = PLAYOFF_ROUND_ORDER.find((code) => tree.some((bout) => bout.roundCode === code));
+  if (!firstCode) return [];
+  return tree.filter((bout) => bout.roundCode === firstCode).sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+function wireWinners(from: PlayoffDraft[], to: PlayoffDraft[]): void {
+  from.forEach((bout, index) => {
+    bout.winnerNextId = to[Math.floor(index / 2)].id;
+  });
+}
+
+function wireLosers(from: PlayoffDraft[], to: PlayoffDraft[]): void {
+  from.forEach((bout) => {
+    bout.loserNextId = to[0].id;
+  });
+}
+
+/** Full single-elim tree. Bronze when n ≥ 4. First round has both ids. */
+export function drawPlayoff(
+  fencerIds: string[],
+  random: () => number = Math.random,
+  newId: () => string = () => crypto.randomUUID()
+): PlayoffDraft[] {
+  const unique = [...new Set(fencerIds)];
+  const n = unique.length;
+  const tree = buildPlayoffTree(n, newId);
+  if (tree.length === 0) return [];
+
+  const shuffled = shuffle(unique, random);
+  const firstCode = tree[0]?.roundCode;
+  const first = tree.filter((bout) => bout.roundCode === firstCode);
   first.forEach((bout, index) => {
     let blueId = shuffled[index * 2];
     let redId = shuffled[index * 2 + 1];
@@ -127,36 +177,14 @@ export function drawPlayoff(
     bout.blueFencerId = blueId;
     bout.redFencerId = redId;
   });
-
-  const byRound = new Map<PlayoffRoundCode, PlayoffDraft[]>();
-  for (const row of rounds) {
-    for (const bout of row) {
-      const list = byRound.get(bout.roundCode) ?? [];
-      list.push(bout);
-      byRound.set(bout.roundCode, list);
-    }
-  }
-
-  let sortOrder = 0;
-  const ordered: PlayoffDraft[] = [];
-  for (const code of PLAYOFF_ROUND_ORDER) {
-    for (const bout of byRound.get(code) ?? []) {
-      bout.sortOrder = sortOrder;
-      sortOrder += 1;
-      ordered.push(bout);
-    }
-  }
-  return ordered;
+  return tree;
 }
 
 export function playoffReadyToStart(bouts: TournamentBout[]): boolean {
   const tree = bouts.filter((bout) => bout.stage === "playoff");
-  if (tree.length === 0) return false;
-  const firstCode = PLAYOFF_ROUND_ORDER.find((code) => tree.some((bout) => bout.roundCode === code));
-  if (!firstCode) return false;
-  const first = tree.filter((bout) => bout.roundCode === firstCode);
-  if (first.length === 0) return false;
-  const n = firstCode === "final" ? 2 : first.length * 2;
+  const first = firstPlayoffRound(bouts);
+  if (tree.length === 0 || first.length === 0) return false;
+  const n = first[0].roundCode === "final" ? 2 : first.length * 2;
   if (tree.length !== expectedPlayoffBoutCount(n)) return false;
   return first.every((bout) => bout.blueFencerId && bout.redFencerId);
 }

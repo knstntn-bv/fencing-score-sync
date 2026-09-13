@@ -4,6 +4,12 @@ import { useFencers } from "@/hooks/useFencers";
 import { TOURNAMENTS_QUERY_KEY } from "@/hooks/useTournaments";
 import { drawRoundRobin, expectedRoundRobinBoutCount } from "@/lib/tournament/roundRobin";
 import { expectedPlayoffBoutCount, isPlayoffSize, playoffReadyToStart } from "@/lib/tournament/playoff";
+import {
+  expectedGroupsPlayoffBoutCount,
+  groupsPlayoffReadyToStart,
+  isValidGroupOption,
+  pendingCutoffTies,
+} from "@/lib/tournament/groups";
 import { computeStandings } from "@/lib/tournament/standings";
 import { scoreResults } from "@/lib/boutOutcome";
 import { playoffOverrideBlock } from "@/lib/tournament/override";
@@ -12,11 +18,14 @@ import {
   getTournamentBout,
   listTournamentBouts,
   overrideTournamentBout,
+  replaceGroupsPlayoffBouts,
   replacePlayoffBouts,
   replaceRoundRobinBouts,
+  resolveGroupCutoff,
 } from "@/lib/tournamentBouts";
 import {
   addParticipant,
+  clearParticipantGroups,
   getTournament,
   listParticipants,
   removeParticipant,
@@ -81,11 +90,16 @@ export function useTournament(id: string | undefined) {
   const patch = useMutation({
     mutationFn: async (next: Parameters<typeof updateTournament>[1]) => {
       if (!id) throw new Error("Missing tournament.");
-      if (next.format !== undefined) {
-        const current = await getTournament(id);
-        if (current?.status === "setup" && current.format !== next.format) {
-          await deleteTournamentBouts(id);
-        }
+      const current = await getTournament(id);
+      const wipeSetup =
+        current?.status === "setup" &&
+        ((next.format !== undefined && next.format !== current.format) ||
+          (next.groupCount !== undefined && next.groupCount !== current.groupCount) ||
+          (next.advancersPerGroup !== undefined &&
+            next.advancersPerGroup !== current.advancersPerGroup));
+      if (wipeSetup) {
+        await deleteTournamentBouts(id);
+        await clearParticipantGroups(id);
       }
       return updateTournament(id, next);
     },
@@ -98,7 +112,10 @@ export function useTournament(id: string | undefined) {
       if (!clubId) throw new Error("Not signed in.");
       const row = await addParticipant({ tournamentId: id, fencerId, clubId });
       const current = queryClient.getQueryData<Tournament | null>([...TOURNAMENT_QUERY_KEY, id]);
-      if (current?.status === "setup") await deleteTournamentBouts(id);
+      if (current?.status === "setup") {
+        await deleteTournamentBouts(id);
+        await clearParticipantGroups(id);
+      }
       return row;
     },
     onSuccess: invalidate,
@@ -109,7 +126,10 @@ export function useTournament(id: string | undefined) {
       if (!id) throw new Error("Missing tournament.");
       await removeParticipant(id, fencerId);
       const current = queryClient.getQueryData<Tournament | null>([...TOURNAMENT_QUERY_KEY, id]);
-      if (current?.status === "setup") await deleteTournamentBouts(id);
+      if (current?.status === "setup") {
+        await deleteTournamentBouts(id);
+        await clearParticipantGroups(id);
+      }
     },
     onSuccess: invalidate,
   });
@@ -128,6 +148,24 @@ export function useTournament(id: string | undefined) {
           throw new Error("Playoff needs 2, 4, 8, 16, or 32 fencers.");
         }
         return replacePlayoffBouts({ tournamentId: id, clubId, fencerIds });
+      }
+      if (current.format === "groups_playoff") {
+        const groupCount = current.groupCount;
+        const advancers = current.advancersPerGroup;
+        if (
+          groupCount == null ||
+          advancers == null ||
+          !isValidGroupOption(fencerIds.length, groupCount, advancers)
+        ) {
+          throw new Error("Choose a valid group count and advancers first.");
+        }
+        return replaceGroupsPlayoffBouts({
+          tournamentId: id,
+          clubId,
+          fencerIds,
+          groupCount,
+          advancers,
+        });
       }
       if (current.format !== "round_robin") throw new Error("Choose a format first.");
       return replaceRoundRobinBouts({
@@ -150,6 +188,20 @@ export function useTournament(id: string | undefined) {
       if (current.format === "playoff") {
         if (!isPlayoffSize(n)) throw new Error("Playoff needs 2, 4, 8, 16, or 32 fencers.");
         if (!playoffReadyToStart(bouts)) throw new Error("Draw the bouts before starting.");
+        return updateTournament(id, { status: "live", liveAt: new Date().toISOString() });
+      }
+      if (current.format === "groups_playoff") {
+        if (!current.pointsScheme) throw new Error("Choose a points scheme first.");
+        const groupCount = current.groupCount;
+        const advancers = current.advancersPerGroup;
+        const participants = await listParticipants(id);
+        if (
+          groupCount == null ||
+          advancers == null ||
+          !groupsPlayoffReadyToStart(bouts, participants, groupCount, advancers)
+        ) {
+          throw new Error("Draw the bouts before starting.");
+        }
         return updateTournament(id, { status: "live", liveAt: new Date().toISOString() });
       }
       if (current.format !== "round_robin") throw new Error("Choose a format first.");
@@ -208,16 +260,55 @@ export function useTournament(id: string | undefined) {
     },
   });
 
+  const resolveCutoff = useMutation({
+    mutationFn: async (input: { groupNo: number; fencerId: string }) => {
+      if (!id) throw new Error("Missing tournament.");
+      if (!navigator.onLine) {
+        throw new Error("Need a network connection to pick an advancer.");
+      }
+      return resolveGroupCutoff({ tournamentId: id, ...input });
+    },
+    onSuccess: invalidate,
+  });
+
   const participants: TournamentParticipant[] = participantsQuery.data ?? [];
   const bouts: TournamentBout[] = boutsQuery.data ?? [];
   const checkedInIds = new Set(participants.map((row) => row.fencerId));
   const people = participants.map((row) => {
     const fencer = [...roster.active, ...roster.archived].find((item) => item.id === row.fencerId);
-    return { id: row.fencerId, name: fencer?.name ?? "Unknown" };
+    return { id: row.fencerId, name: fencer?.name ?? "Unknown", groupNo: row.groupNo };
   });
-  const standings = tournamentQuery.data?.pointsScheme
-    ? computeStandings(people, bouts, tournamentQuery.data.pointsScheme)
-    : [];
+  const event = tournamentQuery.data;
+  const standings = event?.pointsScheme ? computeStandings(people, bouts, event.pointsScheme) : [];
+  const groupScheme = event?.format === "groups_playoff" ? event.pointsScheme : null;
+  const groupTables =
+    groupScheme && event?.groupCount
+      ? Array.from({ length: event.groupCount }, (_, index) => {
+          const groupNo = index + 1;
+          const members = people.filter((person) => person.groupNo === groupNo);
+          return {
+            groupNo,
+            standings: computeStandings(
+              members,
+              bouts.filter((bout) => bout.stage === "group" && bout.groupNo === groupNo),
+              groupScheme
+            ),
+          };
+        })
+      : [];
+  const cutoffTies =
+    event?.format === "groups_playoff" &&
+    event.pointsScheme &&
+    event.groupCount &&
+    event.advancersPerGroup
+      ? pendingCutoffTies(
+          bouts,
+          people,
+          event.pointsScheme,
+          event.groupCount,
+          event.advancersPerGroup
+        )
+      : [];
 
   const queue = bouts.filter((bout) => !bout.finishedAt);
   const finishedBouts = [...bouts]
@@ -235,11 +326,13 @@ export function useTournament(id: string | undefined) {
     : null;
 
   const expectedBoutCount =
-    tournamentQuery.data?.format === "playoff"
+    event?.format === "playoff"
       ? expectedPlayoffBoutCount(participants.length)
-      : tournamentQuery.data?.format === "round_robin"
-        ? expectedRoundRobinBoutCount(participants.length)
-        : 0;
+      : event?.format === "groups_playoff" && event.groupCount && event.advancersPerGroup
+        ? expectedGroupsPlayoffBoutCount(participants.length, event.groupCount, event.advancersPerGroup)
+        : event?.format === "round_robin"
+          ? expectedRoundRobinBoutCount(participants.length)
+          : 0;
 
   return {
     enabled,
@@ -252,6 +345,8 @@ export function useTournament(id: string | undefined) {
     queue,
     finishedBouts,
     standings,
+    groupTables,
+    cutoffTies,
     expectedBoutCount,
     roster,
     isLoading:
@@ -266,6 +361,7 @@ export function useTournament(id: string | undefined) {
     startEvent,
     finishEvent,
     overrideBout,
+    resolveCutoff,
     mutationError: (error: unknown) => tournamentErrorMessage(error, "Request failed."),
   };
 }

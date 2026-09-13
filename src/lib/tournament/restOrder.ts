@@ -10,9 +10,9 @@ function overlap(last: OrderedPair | undefined, next: OrderedPair): number {
 }
 
 /** Greedy sequence that prefers pairs with no fencer from the previous bout. */
-export function restOrderPairs(pairs: OrderedPair[]): OrderedPair[] {
+export function restOrderPairs<T extends OrderedPair>(pairs: T[]): T[] {
   const remaining = [...pairs];
-  const ordered: OrderedPair[] = [];
+  const ordered: T[] = [];
 
   while (remaining.length > 0) {
     const last = ordered[ordered.length - 1];

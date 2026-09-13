@@ -166,6 +166,8 @@ export async function updateTournament(
     pointsScheme?: TournamentPointsScheme | null;
     timeLimitSec?: number;
     pointsLimit?: number;
+    groupCount?: number | null;
+    advancersPerGroup?: number | null;
     status?: TournamentStatus;
     liveAt?: string | null;
     finishedAt?: string | null;
@@ -176,6 +178,8 @@ export async function updateTournament(
   if (patch.pointsScheme !== undefined) payload.points_scheme = patch.pointsScheme;
   if (patch.timeLimitSec !== undefined) payload.time_limit_sec = patch.timeLimitSec;
   if (patch.pointsLimit !== undefined) payload.points_limit = patch.pointsLimit;
+  if (patch.groupCount !== undefined) payload.group_count = patch.groupCount;
+  if (patch.advancersPerGroup !== undefined) payload.advancers_per_group = patch.advancersPerGroup;
   if (patch.status !== undefined) payload.status = patch.status;
   if (patch.liveAt !== undefined) payload.live_at = patch.liveAt;
   if (patch.finishedAt !== undefined) payload.finished_at = patch.finishedAt;
@@ -189,4 +193,26 @@ export async function updateTournament(
 
   if (error) throw error;
   return mapTournament(data);
+}
+
+export async function clearParticipantGroups(tournamentId: string): Promise<void> {
+  const { error } = await requireSupabase()
+    .from("tournament_participants")
+    .update({ group_no: null })
+    .eq("tournament_id", tournamentId);
+  if (error) throw error;
+}
+
+export async function setParticipantGroups(
+  tournamentId: string,
+  assignments: { fencerId: string; groupNo: number }[]
+): Promise<void> {
+  for (const row of assignments) {
+    const { error } = await requireSupabase()
+      .from("tournament_participants")
+      .update({ group_no: row.groupNo })
+      .eq("tournament_id", tournamentId)
+      .eq("fencer_id", row.fencerId);
+    if (error) throw error;
+  }
 }

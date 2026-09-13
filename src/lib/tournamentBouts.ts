@@ -1,9 +1,19 @@
 import type { Database } from "@/types/database";
 import type { BoutResult } from "@/types/fencing";
 import type { TournamentBout } from "@/types/tournament";
+import {
+  drawGroupsPlayoff,
+  groupPlayoffFencerPatches,
+  nextCutoffPlace,
+  parsePlaceholder,
+  placeholderCode,
+  type GroupsPlayoffDraw,
+} from "@/lib/tournament/groups";
 import { playoffOverrideBlock } from "@/lib/tournament/override";
 import { drawPlayoff, propagatePlayoffSlots, type PlayoffDraft } from "@/lib/tournament/playoff";
+import { computeStandings } from "@/lib/tournament/standings";
 import { requireSupabase } from "@/lib/supabase";
+import { getTournament, listParticipants, setParticipantGroups } from "@/lib/tournaments";
 
 type BoutRow = Database["public"]["Tables"]["tournament_bouts"]["Row"];
 type BoutInsert = Database["public"]["Tables"]["tournament_bouts"]["Insert"];
@@ -116,6 +126,8 @@ function playoffInsertRow(
     sort_order: draft.sortOrder,
     blue_fencer_id: draft.blueFencerId,
     red_fencer_id: draft.redFencerId,
+    blue_placeholder: draft.bluePlaceholder,
+    red_placeholder: draft.redPlaceholder,
   };
 }
 
@@ -128,6 +140,11 @@ export async function replacePlayoffBouts(input: {
   const drafts = drawPlayoff(input.fencerIds);
   if (drafts.length === 0) throw new Error("Playoff needs 2, 4, 8, 16, or 32 fencers.");
   await insertTournamentBouts(drafts.map((draft) => playoffInsertRow(input, draft)));
+  await wirePlayoffNextIds(drafts);
+  return listTournamentBouts(input.tournamentId);
+}
+
+async function wirePlayoffNextIds(drafts: PlayoffDraft[]): Promise<void> {
   for (const draft of drafts) {
     if (!draft.winnerNextId && !draft.loserNextId) continue;
     const { error } = await requireSupabase()
@@ -139,6 +156,38 @@ export async function replacePlayoffBouts(input: {
       .eq("id", draft.id);
     if (error) throw error;
   }
+}
+
+export async function replaceGroupsPlayoffBouts(input: {
+  tournamentId: string;
+  clubId: string;
+  fencerIds: string[];
+  groupCount: number;
+  advancers: number;
+  draw?: GroupsPlayoffDraw;
+}): Promise<TournamentBout[]> {
+  const drawn =
+    input.draw ?? drawGroupsPlayoff(input.fencerIds, input.groupCount, input.advancers);
+  if (drawn.playoff.length === 0 || drawn.assignments.length === 0) {
+    throw new Error("Groups + playoff needs a valid group count and advancers.");
+  }
+
+  await deleteTournamentBouts(input.tournamentId);
+  await setParticipantGroups(input.tournamentId, drawn.assignments);
+
+  const groupRows: BoutInsert[] = drawn.groupPairs.map((pair, index) => ({
+    id: newTournamentBoutId(),
+    tournament_id: input.tournamentId,
+    club_id: input.clubId,
+    stage: "group",
+    group_no: pair.groupNo,
+    sort_order: index,
+    blue_fencer_id: pair.blueId,
+    red_fencer_id: pair.redId,
+  }));
+  await insertTournamentBouts(groupRows);
+  await insertTournamentBouts(drawn.playoff.map((draft) => playoffInsertRow(input, draft)));
+  await wirePlayoffNextIds(drawn.playoff);
   return listTournamentBouts(input.tournamentId);
 }
 
@@ -158,10 +207,106 @@ export async function applyPlayoffFencerUpdates(
   }
 }
 
+async function fencerNamesById(ids: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return new Map();
+  const { data, error } = await requireSupabase().from("fencers").select("id, name").in("id", unique);
+  if (error) throw error;
+  return new Map((data ?? []).map((row) => [row.id, row.name]));
+}
+
+export async function syncGroupsAndPlayoff(tournamentId: string): Promise<boolean> {
+  const tournament = await getTournament(tournamentId);
+  let bouts = await listTournamentBouts(tournamentId);
+  let changed = false;
+
+  if (
+    tournament?.format === "groups_playoff" &&
+    tournament.pointsScheme &&
+    tournament.groupCount &&
+    tournament.advancersPerGroup
+  ) {
+    const participants = await listParticipants(tournamentId);
+    const names = await fencerNamesById(participants.map((row) => row.fencerId));
+    const people = participants.map((row) => ({
+      id: row.fencerId,
+      name: names.get(row.fencerId) ?? row.fencerId,
+      groupNo: row.groupNo,
+    }));
+    const { patches } = groupPlayoffFencerPatches(
+      bouts,
+      people,
+      tournament.pointsScheme,
+      tournament.groupCount,
+      tournament.advancersPerGroup
+    );
+    if (patches.length > 0) {
+      await applyPlayoffFencerUpdates(patches);
+      changed = true;
+      bouts = await listTournamentBouts(tournamentId);
+    }
+  }
+
+  const playoffPatches = propagatePlayoffSlots(bouts);
+  if (playoffPatches.length > 0) {
+    await applyPlayoffFencerUpdates(playoffPatches);
+    changed = true;
+  }
+  return changed;
+}
+
 export async function syncPlayoffTree(tournamentId: string): Promise<void> {
-  const bouts = await listTournamentBouts(tournamentId);
-  if (!bouts.some((bout) => bout.stage === "playoff")) return;
-  await applyPlayoffFencerUpdates(propagatePlayoffSlots(bouts));
+  await syncGroupsAndPlayoff(tournamentId);
+}
+
+export async function resolveGroupCutoff(input: {
+  tournamentId: string;
+  groupNo: number;
+  fencerId: string;
+}): Promise<void> {
+  const tournament = await getTournament(input.tournamentId);
+  if (!tournament || tournament.format !== "groups_playoff") {
+    throw new Error("This event is not groups + playoff.");
+  }
+  if (!tournament.pointsScheme || !tournament.advancersPerGroup) {
+    throw new Error("Choose a points scheme first.");
+  }
+
+  const bouts = await listTournamentBouts(input.tournamentId);
+  const participants = await listParticipants(input.tournamentId);
+  const members = participants.filter((row) => row.groupNo === input.groupNo);
+  if (!members.some((row) => row.fencerId === input.fencerId)) {
+    throw new Error("That fencer is not in this group.");
+  }
+
+  const names = await fencerNamesById(members.map((row) => row.fencerId));
+  const standings = computeStandings(
+    members.map((row) => ({ id: row.fencerId, name: names.get(row.fencerId) ?? row.fencerId })),
+    bouts.filter((bout) => bout.stage === "group" && bout.groupNo === input.groupNo),
+    tournament.pointsScheme
+  );
+  const place = nextCutoffPlace(bouts, input.groupNo, standings, tournament.advancersPerGroup);
+  if (place == null) throw new Error("There is no cutoff to resolve.");
+
+  const code = placeholderCode(input.groupNo, place);
+  const slot = bouts.find((bout) => {
+    if (bout.stage !== "playoff" || bout.finishedAt) return false;
+    return bout.bluePlaceholder === code || bout.redPlaceholder === code;
+  });
+  if (!slot) throw new Error("Could not find that playoff slot.");
+
+  const parsedBlue = parsePlaceholder(slot.bluePlaceholder);
+  const onBlue = parsedBlue?.groupNo === input.groupNo && parsedBlue.place === place;
+  const { error } = await requireSupabase()
+    .from("tournament_bouts")
+    .update(
+      onBlue ? { blue_fencer_id: input.fencerId } : { red_fencer_id: input.fencerId }
+    )
+    .eq("id", slot.id)
+    .is("finished_at", null);
+  if (error) throw error;
+
+  await syncGroupsAndPlayoff(input.tournamentId);
 }
 
 export type SaveTournamentBoutInput = {
@@ -212,7 +357,9 @@ export async function saveTournamentBout(input: SaveTournamentBoutInput): Promis
   if (error) throw error;
   if (!data) throw new Error("This bout is already saved.");
   const saved = mapTournamentBout(data);
-  if (saved.stage === "playoff") await syncPlayoffTree(saved.tournamentId);
+  if (saved.stage === "playoff" || saved.stage === "group") {
+    await syncPlayoffTree(saved.tournamentId);
+  }
   return saved;
 }
 
@@ -250,6 +397,8 @@ export async function overrideTournamentBout(
   if (error) throw error;
   if (!data) throw new Error("This bout was not found.");
   const saved = mapTournamentBout(data);
-  if (saved.stage === "playoff") await syncPlayoffTree(saved.tournamentId);
+  if (saved.stage === "playoff" || saved.stage === "group") {
+    await syncPlayoffTree(saved.tournamentId);
+  }
   return saved;
 }
