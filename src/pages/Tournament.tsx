@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { ArrowLeft, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { ClubNav } from "@/components/ClubNav";
+import { OverrideBoutDialog } from "@/components/OverrideBoutDialog";
 import { PlayoffBracket } from "@/components/PlayoffBracket";
 import {
   AlertDialog,
