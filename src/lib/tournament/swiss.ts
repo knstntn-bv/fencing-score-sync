@@ -196,6 +196,7 @@ export function nextSwissRoundNumber(bouts: TournamentBout[]): number {
   return rounds[rounds.length - 1].round + 1;
 }
 
+/** Later rounds with no saved bouts. Dropped only on override, not on every sync. */
 export function swissRoundsToDrop(bouts: TournamentBout[]): number[] {
   return swissBoutsByRound(bouts)
     .filter(({ round, bouts: rows }) => round > 1 && rows.every((bout) => !bout.finishedAt))

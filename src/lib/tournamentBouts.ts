@@ -256,7 +256,10 @@ export async function replaceSwissBouts(input: {
   return listTournamentBouts(input.tournamentId);
 }
 
-export async function syncSwiss(tournamentId: string): Promise<boolean> {
+export async function syncSwiss(
+  tournamentId: string,
+  options?: { rebuildUnplayed?: boolean }
+): Promise<boolean> {
   const tournament = await getTournament(tournamentId);
   if (tournament?.format !== "swiss" || !tournament.swissRounds || !tournament.pointsScheme) {
     return false;
@@ -271,11 +274,14 @@ export async function syncSwiss(tournamentId: string): Promise<boolean> {
   let bouts = await listTournamentBouts(tournamentId);
   let changed = false;
 
-  const drop = swissRoundsToDrop(bouts);
-  if (drop.length > 0) {
-    await deleteSwissRounds(tournamentId, drop);
-    changed = true;
-    bouts = await listTournamentBouts(tournamentId);
+  // Override rebuilds unplayed later rounds. A live sync must not: that redraws them forever.
+  if (options?.rebuildUnplayed) {
+    const drop = swissRoundsToDrop(bouts);
+    if (drop.length > 0) {
+      await deleteSwissRounds(tournamentId, drop);
+      changed = true;
+      bouts = await listTournamentBouts(tournamentId);
+    }
   }
 
   while (swissNeedsNextRound(bouts, ids.length, tournament.swissRounds)) {
@@ -515,6 +521,6 @@ export async function overrideTournamentBout(
   if (saved.stage === "playoff" || saved.stage === "group") {
     await syncPlayoffTree(saved.tournamentId);
   }
-  if (saved.stage === "swiss") await syncSwiss(saved.tournamentId);
+  if (saved.stage === "swiss") await syncSwiss(saved.tournamentId, { rebuildUnplayed: true });
   return saved;
 }
