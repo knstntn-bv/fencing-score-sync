@@ -13,6 +13,10 @@ import {
 } from "@/lib/tournament/groups";
 import { computeStandings } from "@/lib/tournament/standings";
 import {
+  computeKothStandings,
+  kothExits,
+} from "@/lib/tournament/kingOfHill";
+import {
   computeSwissStandings,
   expectedSwissRoundBoutCount,
   swissNeedsNextRound,
@@ -236,6 +240,10 @@ export function useTournament(id: string | undefined) {
         }
         return updateTournament(id, { status: "live", liveAt: new Date().toISOString() });
       }
+      if (current.format === "king_of_hill") {
+        if (n < 2) throw new Error("Check in at least two fencers.");
+        return updateTournament(id, { status: "live", liveAt: new Date().toISOString() });
+      }
       if (current.format !== "round_robin") throw new Error("Choose a format first.");
       if (!current.pointsScheme) throw new Error("Choose a points scheme first.");
       if (bouts.length !== expectedRoundRobinBoutCount(n) || bouts.length === 0) {
@@ -336,6 +344,14 @@ export function useTournament(id: string | undefined) {
       ? computeSwissStandings(people, bouts, event.pointsScheme)
       : computeStandings(people, bouts, event.pointsScheme)
     : [];
+  const kothTable =
+    event?.format === "king_of_hill"
+      ? computeKothStandings(people, bouts)
+      : [];
+  const kothExitRows =
+    event?.format === "king_of_hill"
+      ? kothExits(people, bouts, event.kothExitLimit)
+      : [];
   const groupScheme = event?.format === "groups_playoff" ? event.pointsScheme : null;
   const groupTables =
     groupScheme && event?.groupCount
@@ -421,6 +437,8 @@ export function useTournament(id: string | undefined) {
     queue,
     finishedBouts,
     standings,
+    kothTable,
+    kothExits: kothExitRows,
     groupTables,
     cutoffTies,
     needsGroupSync,
@@ -448,11 +466,12 @@ export function useTournament(id: string | undefined) {
 
 export function useTournamentSlot(tournamentId: string | null, boutId: string | null) {
   const { configured } = useAuth();
-  const enabled = configured && Boolean(tournamentId) && Boolean(boutId);
+  const tournamentEnabled = configured && Boolean(tournamentId);
+  const boutEnabled = tournamentEnabled && Boolean(boutId);
 
   const tournamentQuery = useQuery({
     queryKey: [...TOURNAMENT_QUERY_KEY, tournamentId],
-    enabled,
+    enabled: tournamentEnabled,
     queryFn: () => {
       if (!tournamentId) throw new Error("Missing tournament.");
       return getTournament(tournamentId);
@@ -461,7 +480,7 @@ export function useTournamentSlot(tournamentId: string | null, boutId: string | 
 
   const boutQuery = useQuery({
     queryKey: [...TOURNAMENT_BOUTS_QUERY_KEY, "slot", boutId],
-    enabled,
+    enabled: boutEnabled,
     queryFn: () => {
       if (!boutId) throw new Error("Missing bout.");
       return getTournamentBout(boutId);
@@ -473,14 +492,17 @@ export function useTournamentSlot(tournamentId: string | null, boutId: string | 
   const mismatch = Boolean(bout && tournamentId && bout.tournamentId !== tournamentId);
 
   return {
-    enabled,
+    enabled: tournamentEnabled,
     tournament,
     bout: mismatch ? null : bout,
-    isLoading: enabled && (tournamentQuery.isLoading || boutQuery.isLoading),
+    isLoading:
+      tournamentEnabled &&
+      (tournamentQuery.isLoading || (boutEnabled && boutQuery.isLoading)),
     notFound:
-      enabled &&
+      tournamentEnabled &&
       tournamentQuery.isSuccess &&
-      boutQuery.isSuccess &&
-      (!tournament || !bout || mismatch),
+      (boutEnabled
+        ? boutQuery.isSuccess && (!tournament || !bout || mismatch)
+        : tournament === null),
   };
 }

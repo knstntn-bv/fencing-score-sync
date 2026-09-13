@@ -43,6 +43,15 @@ import {
   swissRoundLabel,
 } from "@/lib/tournament/swiss";
 import {
+  clampKothExitLimit,
+  KOTH_EXIT_LIMIT_DEFAULT,
+  KOTH_EXIT_LIMIT_MAX,
+  KOTH_EXIT_LIMIT_MIN,
+  type KothExitRow,
+  type KothStandingRow,
+} from "@/lib/tournament/kingOfHill";
+import { Badge } from "@/components/ui/badge";
+import {
   TOURNAMENT_FORMAT_LABEL,
   TOURNAMENT_POINTS_SCHEME_LABEL,
   TOURNAMENT_STATUS_LABEL,
@@ -53,7 +62,6 @@ import {
 import type { Fencer } from "@/types/fencing";
 import type { StandingRow } from "@/lib/tournament/standings";
 
-const LATER_FORMATS: TournamentFormat[] = ["king_of_hill"];
 const SCHEMES: TournamentPointsScheme[] = ["half", "binary", "football"];
 
 export default function TournamentPage() {
@@ -235,6 +243,9 @@ export default function TournamentPage() {
           queue={tournament.queue}
           finishedBouts={tournament.finishedBouts}
           standings={tournament.standings}
+          kothExits={tournament.kothExits}
+          kothTable={tournament.kothTable}
+          tournamentId={event.id}
           groupTables={tournament.groupTables}
           cutoffTies={tournament.cutoffTies}
           resolvingId={
@@ -286,17 +297,24 @@ function SetupPanel({
   const event = tournament.tournament;
   const timeLimitSec = event?.timeLimitSec;
   const pointsLimitValue = event?.pointsLimit;
+  const exitLimitValue = event?.kothExitLimit;
   const [timeLimit, setTimeLimit] = useState(timeLimitSec ?? 90);
   const [pointsLimit, setPointsLimit] = useState(pointsLimitValue ?? 12);
+  const [exitLimit, setExitLimit] = useState(exitLimitValue ?? KOTH_EXIT_LIMIT_DEFAULT);
 
   useEffect(() => {
     if (timeLimitSec != null) setTimeLimit(timeLimitSec);
     if (pointsLimitValue != null) setPointsLimit(pointsLimitValue);
-  }, [timeLimitSec, pointsLimitValue]);
+    if (exitLimitValue != null) setExitLimit(exitLimitValue);
+  }, [timeLimitSec, pointsLimitValue, exitLimitValue]);
 
   if (!event) return null;
 
-  const saveLimits = async (next: { timeLimitSec?: number; pointsLimit?: number }) => {
+  const saveLimits = async (next: {
+    timeLimitSec?: number;
+    pointsLimit?: number;
+    kothExitLimit?: number;
+  }) => {
     try {
       await tournament.patch.mutateAsync(next);
     } catch (error) {
@@ -326,18 +344,19 @@ function SetupPanel({
           ? Boolean(event.pointsScheme) &&
             swissReadyToStart(tournament.bouts, checkedIn) &&
             event.swissRounds === swissRounds
-          : event.format === "round_robin" &&
-            Boolean(event.pointsScheme) &&
-            tournament.bouts.length === tournament.expectedBoutCount &&
-            tournament.expectedBoutCount > 0;
+          : event.format === "king_of_hill"
+            ? event.kothExitLimit >= KOTH_EXIT_LIMIT_MIN
+            : event.format === "round_robin" &&
+              Boolean(event.pointsScheme) &&
+              tournament.bouts.length === tournament.expectedBoutCount &&
+              tournament.expectedBoutCount > 0;
 
   return (
     <section className="space-y-6">
       <div>
         <h2 className="text-lg font-medium">Format</h2>
         <p className="text-sm text-muted-foreground mb-3">
-          Round robin, playoff, groups + playoff, and Swiss are available now. King of the hill
-          comes later.
+          Round robin, playoff, groups + playoff, Swiss, and king of the hill are available now.
         </p>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -421,11 +440,26 @@ function SetupPanel({
           >
             {TOURNAMENT_FORMAT_LABEL.swiss}
           </Button>
-          {LATER_FORMATS.map((item) => (
-            <Button key={item} type="button" variant="outline" disabled>
-              {TOURNAMENT_FORMAT_LABEL[item]}
-            </Button>
-          ))}
+          <Button
+            type="button"
+            variant={event.format === "king_of_hill" ? "default" : "outline"}
+            onClick={async () => {
+              if (event.format === "king_of_hill") return;
+              try {
+                await tournament.patch.mutateAsync({
+                  format: "king_of_hill",
+                  groupCount: null,
+                  advancersPerGroup: null,
+                  swissRounds: null,
+                  pointsScheme: null,
+                });
+              } catch (error) {
+                toast.error(tournament.mutationError(error));
+              }
+            }}
+          >
+            {TOURNAMENT_FORMAT_LABEL.king_of_hill}
+          </Button>
         </div>
         {!playoffOk ? (
           <p className="text-sm text-muted-foreground mt-2">
@@ -514,7 +548,7 @@ function SetupPanel({
         </div>
       ) : null}
 
-      {event.format === "playoff" ? null : (
+      {event.format === "playoff" || event.format === "king_of_hill" ? null : (
       <div>
         <h2 className="text-lg font-medium">Points scheme</h2>
         <p className="text-sm text-muted-foreground mb-3">
@@ -540,6 +574,25 @@ function SetupPanel({
         </div>
       </div>
       )}
+
+      {event.format === "king_of_hill" ? (
+        <div className="space-y-2">
+          <Label>Exits per fencer: {exitLimit}</Label>
+          <p className="text-sm text-muted-foreground">
+            A reminder for the hall. The scoreboard does not block someone with none left.
+          </p>
+          <Slider
+            value={[exitLimit]}
+            min={KOTH_EXIT_LIMIT_MIN}
+            max={KOTH_EXIT_LIMIT_MAX}
+            step={1}
+            onValueChange={(value) => setExitLimit(clampKothExitLimit(value[0]))}
+            onValueCommit={(value) =>
+              void saveLimits({ kothExitLimit: clampKothExitLimit(value[0]) })
+            }
+          />
+        </div>
+      ) : null}
 
       <div className="space-y-4">
         <div className="space-y-2">
@@ -567,21 +620,23 @@ function SetupPanel({
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={!event.format || tournament.draw.isPending}
-          onClick={async () => {
-            try {
-              await tournament.draw.mutateAsync();
-              toast.success("Bouts drawn");
-            } catch (error) {
-              toast.error(tournament.mutationError(error));
-            }
-          }}
-        >
-          {tournament.bouts.length > 0 ? "Draw again" : "Draw bouts"}
-        </Button>
+        {event.format === "king_of_hill" ? null : (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={!event.format || tournament.draw.isPending}
+            onClick={async () => {
+              try {
+                await tournament.draw.mutateAsync();
+                toast.success("Bouts drawn");
+              } catch (error) {
+                toast.error(tournament.mutationError(error));
+              }
+            }}
+          >
+            {tournament.bouts.length > 0 ? "Draw again" : "Draw bouts"}
+          </Button>
+        )}
         <Button
           type="button"
           disabled={!canStart || tournament.startEvent.isPending}
@@ -599,11 +654,13 @@ function SetupPanel({
       </div>
 
       <p className="text-sm text-muted-foreground">
-        {tournament.bouts.length > 0
-          ? event.format === "swiss"
-            ? `${tournament.bouts.length} of ${tournament.expectedBoutCount} round 1 bouts ready.`
-            : `${tournament.bouts.length} of ${tournament.expectedBoutCount} bouts ready.`
-          : "Choose a format, draw the bouts, then start."}
+        {event.format === "king_of_hill"
+          ? "Start the event, then pick fencers on the scoreboard."
+          : tournament.bouts.length > 0
+            ? event.format === "swiss"
+              ? `${tournament.bouts.length} of ${tournament.expectedBoutCount} round 1 bouts ready.`
+              : `${tournament.bouts.length} of ${tournament.expectedBoutCount} bouts ready.`
+            : "Choose a format, draw the bouts, then start."}
         {(event.format === "round_robin" ||
           event.format === "groups_playoff" ||
           event.format === "swiss") &&
@@ -622,6 +679,9 @@ function ConductingPanel({
   queue,
   finishedBouts,
   standings,
+  kothExits,
+  kothTable,
+  tournamentId,
   groupTables,
   cutoffTies,
   resolvingId,
@@ -638,6 +698,9 @@ function ConductingPanel({
   queue: TournamentBout[];
   finishedBouts: TournamentBout[];
   standings: StandingRow[];
+  kothExits: KothExitRow[];
+  kothTable: KothStandingRow[];
+  tournamentId: string;
   groupTables: { groupNo: number; standings: StandingRow[] }[];
   cutoffTies: CutoffTie[];
   resolvingId?: string;
@@ -702,6 +765,8 @@ function ConductingPanel({
                   <p className="text-muted-foreground">No bouts left in the queue.</p>
                 ) : null}
               </>
+            ) : format === "king_of_hill" ? (
+              <KothQueue exits={kothExits} tournamentId={tournamentId} />
             ) : format === "swiss" ? (
               swissQueue.length === 0 ? (
                 <p className="text-muted-foreground">No bouts left in the queue.</p>
@@ -738,6 +803,12 @@ function ConductingPanel({
         <TabsContent value="table" className="space-y-6">
           {format === "playoff" ? (
             <PlayoffBracket bouts={bouts} fencerName={fencerName} showStart={false} />
+          ) : format === "king_of_hill" ? (
+            kothTable.length === 0 ? (
+              <p className="text-muted-foreground">Standings appear after bouts are saved.</p>
+            ) : (
+              <KothStandingsList rows={kothTable} />
+            )
           ) : format === "groups_playoff" ? (
             <>
               {groupTables.map((table) => {
@@ -831,6 +902,71 @@ function ConductingPanel({
         </AlertDialog>
       ) : null}
     </section>
+  );
+}
+
+function KothQueue({
+  exits,
+  tournamentId,
+}: {
+  exits: KothExitRow[];
+  tournamentId: string;
+}) {
+  return (
+    <div className="space-y-4">
+      <Button asChild>
+        <Link to={`/?t=${tournamentId}`}>Open scoreboard</Link>
+      </Button>
+      {exits.length === 0 ? (
+        <p className="text-muted-foreground">Check-in is empty.</p>
+      ) : (
+        <ul className="space-y-3">
+          {exits.map((row) => (
+            <li key={row.fencerId}>
+              <Card>
+                <CardContent className="p-4 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">{row.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {row.remaining} {row.remaining === 1 ? "exit" : "exits"} left
+                    </p>
+                  </div>
+                  {row.isKing ? <Badge>King</Badge> : null}
+                </CardContent>
+              </Card>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function KothStandingsList({ rows }: { rows: KothStandingRow[] }) {
+  return (
+    <ul className="space-y-3">
+      {rows.map((row) => (
+        <li key={row.fencerId}>
+          <Card>
+            <CardContent className="p-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-medium truncate">{row.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {row.wins} {row.wins === 1 ? "win" : "wins"} · best streak {row.bestStreak}
+                </p>
+                {row.titles.wins || row.titles.streak || row.titles.last ? (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {row.titles.wins ? <Badge variant="secondary">Wins</Badge> : null}
+                    {row.titles.streak ? <Badge variant="secondary">Streak</Badge> : null}
+                    {row.titles.last ? <Badge variant="secondary">On strip</Badge> : null}
+                  </div>
+                ) : null}
+              </div>
+            </CardContent>
+          </Card>
+        </li>
+      ))}
+    </ul>
   );
 }
 
