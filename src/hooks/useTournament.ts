@@ -12,6 +12,14 @@ import {
   pendingCutoffTies,
 } from "@/lib/tournament/groups";
 import { computeStandings } from "@/lib/tournament/standings";
+import {
+  computeSwissStandings,
+  expectedSwissRoundBoutCount,
+  swissNeedsNextRound,
+  swissReadyToStart,
+  swissRoundCount,
+  swissRoundsToDrop,
+} from "@/lib/tournament/swiss";
 import { scoreResults } from "@/lib/boutOutcome";
 import { playoffOverrideBlock } from "@/lib/tournament/override";
 import {
@@ -22,8 +30,10 @@ import {
   replaceGroupsPlayoffBouts,
   replacePlayoffBouts,
   replaceRoundRobinBouts,
+  replaceSwissBouts,
   resolveGroupCutoff,
   syncGroupsAndPlayoff,
+  syncSwiss,
 } from "@/lib/tournamentBouts";
 import {
   addParticipant,
@@ -103,7 +113,14 @@ export function useTournament(id: string | undefined) {
         await deleteTournamentBouts(id);
         await clearParticipantGroups(id);
       }
-      return updateTournament(id, next);
+      const payload =
+        current &&
+        next.format !== undefined &&
+        next.format !== current.format &&
+        next.swissRounds === undefined
+          ? { ...next, swissRounds: null }
+          : next;
+      return updateTournament(id, payload);
     },
     onSuccess: invalidate,
   });
@@ -117,6 +134,7 @@ export function useTournament(id: string | undefined) {
       if (current?.status === "setup") {
         await deleteTournamentBouts(id);
         await clearParticipantGroups(id);
+        if (current.swissRounds != null) await updateTournament(id, { swissRounds: null });
       }
       return row;
     },
@@ -131,6 +149,7 @@ export function useTournament(id: string | undefined) {
       if (current?.status === "setup") {
         await deleteTournamentBouts(id);
         await clearParticipantGroups(id);
+        if (current.swissRounds != null) await updateTournament(id, { swissRounds: null });
       }
     },
     onSuccess: invalidate,
@@ -168,6 +187,9 @@ export function useTournament(id: string | undefined) {
           groupCount,
           advancers,
         });
+      }
+      if (current.format === "swiss") {
+        return replaceSwissBouts({ tournamentId: id, clubId, fencerIds });
       }
       if (current.format !== "round_robin") throw new Error("Choose a format first.");
       return replaceRoundRobinBouts({
@@ -207,6 +229,13 @@ export function useTournament(id: string | undefined) {
         const live = await updateTournament(id, { status: "live", liveAt: new Date().toISOString() });
         await syncGroupsAndPlayoff(id);
         return live;
+      }
+      if (current.format === "swiss") {
+        if (!current.pointsScheme) throw new Error("Choose a points scheme first.");
+        if (!swissReadyToStart(bouts, n) || current.swissRounds !== swissRoundCount(n)) {
+          throw new Error("Draw the bouts before starting.");
+        }
+        return updateTournament(id, { status: "live", liveAt: new Date().toISOString() });
       }
       if (current.format !== "round_robin") throw new Error("Choose a format first.");
       if (!current.pointsScheme) throw new Error("Choose a points scheme first.");
@@ -285,6 +314,16 @@ export function useTournament(id: string | undefined) {
     },
   });
 
+  const syncSwissRounds = useMutation({
+    mutationFn: async () => {
+      if (!id) throw new Error("Missing tournament.");
+      return syncSwiss(id);
+    },
+    onSuccess: (changed) => {
+      if (changed) invalidate();
+    },
+  });
+
   const participants: TournamentParticipant[] = participantsQuery.data ?? [];
   const bouts: TournamentBout[] = boutsQuery.data ?? [];
   const checkedInIds = new Set(participants.map((row) => row.fencerId));
@@ -293,7 +332,11 @@ export function useTournament(id: string | undefined) {
     return { id: row.fencerId, name: fencer?.name ?? "Unknown", groupNo: row.groupNo };
   });
   const event = tournamentQuery.data;
-  const standings = event?.pointsScheme ? computeStandings(people, bouts, event.pointsScheme) : [];
+  const standings = event?.pointsScheme
+    ? event.format === "swiss"
+      ? computeSwissStandings(people, bouts, event.pointsScheme)
+      : computeStandings(people, bouts, event.pointsScheme)
+    : [];
   const groupScheme = event?.format === "groups_playoff" ? event.pointsScheme : null;
   const groupTables =
     groupScheme && event?.groupCount
@@ -337,6 +380,11 @@ export function useTournament(id: string | undefined) {
           event.advancersPerGroup
         ).patches.length > 0
       : false;
+  const needsSwissSync =
+    event?.status === "live" && event.format === "swiss" && event.pointsScheme && event.swissRounds
+      ? swissRoundsToDrop(bouts).length > 0 ||
+        swissNeedsNextRound(bouts, participants.length, event.swissRounds)
+      : false;
 
   const queue = bouts.filter((bout) => !bout.finishedAt);
   const finishedBouts = [...bouts]
@@ -358,9 +406,11 @@ export function useTournament(id: string | undefined) {
       ? expectedPlayoffBoutCount(participants.length)
       : event?.format === "groups_playoff" && event.groupCount && event.advancersPerGroup
         ? expectedGroupsPlayoffBoutCount(participants.length, event.groupCount, event.advancersPerGroup)
-        : event?.format === "round_robin"
-          ? expectedRoundRobinBoutCount(participants.length)
-          : 0;
+        : event?.format === "swiss"
+          ? expectedSwissRoundBoutCount(participants.length)
+          : event?.format === "round_robin"
+            ? expectedRoundRobinBoutCount(participants.length)
+            : 0;
 
   return {
     enabled,
@@ -376,6 +426,7 @@ export function useTournament(id: string | undefined) {
     groupTables,
     cutoffTies,
     needsGroupSync,
+    needsSwissSync,
     expectedBoutCount,
     roster,
     isLoading:
@@ -392,6 +443,7 @@ export function useTournament(id: string | undefined) {
     overrideBout,
     resolveCutoff,
     syncGroups,
+    syncSwiss: syncSwissRounds,
     mutationError: (error: unknown) => tournamentErrorMessage(error, "Request failed."),
   };
 }

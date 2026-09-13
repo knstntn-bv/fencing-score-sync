@@ -37,6 +37,12 @@ import {
 } from "@/lib/tournament/groups";
 import { isPlayoffSize, playoffReadyToStart } from "@/lib/tournament/playoff";
 import {
+  swissBoutsByRound,
+  swissReadyToStart,
+  swissRoundCount,
+  swissRoundLabel,
+} from "@/lib/tournament/swiss";
+import {
   TOURNAMENT_FORMAT_LABEL,
   TOURNAMENT_POINTS_SCHEME_LABEL,
   TOURNAMENT_STATUS_LABEL,
@@ -47,7 +53,7 @@ import {
 import type { Fencer } from "@/types/fencing";
 import type { StandingRow } from "@/lib/tournament/standings";
 
-const LATER_FORMATS: TournamentFormat[] = ["swiss", "king_of_hill"];
+const LATER_FORMATS: TournamentFormat[] = ["king_of_hill"];
 const SCHEMES: TournamentPointsScheme[] = ["half", "binary", "football"];
 
 export default function TournamentPage() {
@@ -60,10 +66,14 @@ export default function TournamentPage() {
     .join("|");
   const attemptedGroupSync = useRef("");
 
+  const attemptedSwissSync = useRef("");
   const needsGroupSync = tournament.needsGroupSync;
+  const needsSwissSync = tournament.needsSwissSync;
   const cutoffTieCount = tournament.cutoffTies.length;
   const syncGroupsPending = tournament.syncGroups.isPending;
   const syncGroupsNow = tournament.syncGroups.mutateAsync;
+  const syncSwissPending = tournament.syncSwiss.isPending;
+  const syncSwissNow = tournament.syncSwiss.mutateAsync;
 
   useEffect(() => {
     if (!event || event.status !== "live" || event.format !== "groups_playoff") return;
@@ -82,6 +92,16 @@ export default function TournamentPage() {
     syncGroupsPending,
     syncGroupsNow,
   ]);
+
+  useEffect(() => {
+    if (!event || event.status !== "live" || event.format !== "swiss") return;
+    if (!needsSwissSync || syncSwissPending) return;
+    if (attemptedSwissSync.current === groupSyncKey) return;
+    attemptedSwissSync.current = groupSyncKey;
+    void syncSwissNow().catch(() => {
+      /* save/override also sync; a failed extra pass should not loop */
+    });
+  }, [event, groupSyncKey, needsSwissSync, syncSwissPending, syncSwissNow]);
 
   if (!configured) {
     return (
@@ -284,9 +304,11 @@ function SetupPanel({
     }
   };
 
-  const playoffOk = isPlayoffSize(tournament.checkedInIds.size);
-  const groupOptions = validGroupOptions(tournament.checkedInIds.size);
+  const checkedIn = tournament.checkedInIds.size;
+  const playoffOk = isPlayoffSize(checkedIn);
+  const groupOptions = validGroupOptions(checkedIn);
   const groupsOk = groupOptions.length > 0;
+  const swissRounds = swissRoundCount(checkedIn);
   const canStart =
     event.format === "playoff"
       ? playoffReadyToStart(tournament.bouts)
@@ -300,17 +322,22 @@ function SetupPanel({
             event.groupCount,
             event.advancersPerGroup
           )
-        : event.format === "round_robin" &&
-          Boolean(event.pointsScheme) &&
-          tournament.bouts.length === tournament.expectedBoutCount &&
-          tournament.expectedBoutCount > 0;
+        : event.format === "swiss"
+          ? Boolean(event.pointsScheme) &&
+            swissReadyToStart(tournament.bouts, checkedIn) &&
+            event.swissRounds === swissRounds
+          : event.format === "round_robin" &&
+            Boolean(event.pointsScheme) &&
+            tournament.bouts.length === tournament.expectedBoutCount &&
+            tournament.expectedBoutCount > 0;
 
   return (
     <section className="space-y-6">
       <div>
         <h2 className="text-lg font-medium">Format</h2>
         <p className="text-sm text-muted-foreground mb-3">
-          Round robin, playoff, and groups + playoff are available now. Other presets come later.
+          Round robin, playoff, groups + playoff, and Swiss are available now. King of the hill
+          comes later.
         </p>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -375,6 +402,25 @@ function SetupPanel({
           >
             {TOURNAMENT_FORMAT_LABEL.groups_playoff}
           </Button>
+          <Button
+            type="button"
+            variant={event.format === "swiss" ? "default" : "outline"}
+            onClick={async () => {
+              if (event.format === "swiss") return;
+              try {
+                await tournament.patch.mutateAsync({
+                  format: "swiss",
+                  groupCount: null,
+                  advancersPerGroup: null,
+                  swissRounds: null,
+                });
+              } catch (error) {
+                toast.error(tournament.mutationError(error));
+              }
+            }}
+          >
+            {TOURNAMENT_FORMAT_LABEL.swiss}
+          </Button>
           {LATER_FORMATS.map((item) => (
             <Button key={item} type="button" variant="outline" disabled>
               {TOURNAMENT_FORMAT_LABEL[item]}
@@ -389,6 +435,11 @@ function SetupPanel({
         {!groupsOk ? (
           <p className="text-sm text-muted-foreground mt-2">
             Groups + playoff needs 2, 4, or 8 groups and a playoff of 2, 4, 8, 16, or 32.
+          </p>
+        ) : null}
+        {event.format === "swiss" ? (
+          <p className="text-sm text-muted-foreground mt-2">
+            {swissRounds} {swissRounds === 1 ? "round" : "rounds"} (from check-in).
           </p>
         ) : null}
       </div>
@@ -549,12 +600,14 @@ function SetupPanel({
 
       <p className="text-sm text-muted-foreground">
         {tournament.bouts.length > 0
-          ? `${tournament.bouts.length} of ${tournament.expectedBoutCount} bouts ready.`
+          ? event.format === "swiss"
+            ? `${tournament.bouts.length} of ${tournament.expectedBoutCount} round 1 bouts ready.`
+            : `${tournament.bouts.length} of ${tournament.expectedBoutCount} bouts ready.`
           : "Choose a format, draw the bouts, then start."}
-        {event.format === "round_robin" && !event.pointsScheme
-          ? " Choose a points scheme to start."
-          : null}
-        {event.format === "groups_playoff" && !event.pointsScheme
+        {(event.format === "round_robin" ||
+          event.format === "groups_playoff" ||
+          event.format === "swiss") &&
+        !event.pointsScheme
           ? " Choose a points scheme to start."
           : null}
       </p>
@@ -602,6 +655,7 @@ function ConductingPanel({
     bouts: queue.filter((bout) => bout.stage === "group" && bout.groupNo === table.groupNo),
   }));
   const hasGroupQueue = groupQueue.some((group) => group.bouts.length > 0);
+  const swissQueue = swissBoutsByRound(queue);
   const pendingGroupNos = cutoffTies.map((tie) => tie.groupNo);
   const cutoffByGroup = new Map(cutoffTies.map((tie) => [tie.groupNo, tie]));
 
@@ -648,6 +702,25 @@ function ConductingPanel({
                   <p className="text-muted-foreground">No bouts left in the queue.</p>
                 ) : null}
               </>
+            ) : format === "swiss" ? (
+              swissQueue.length === 0 ? (
+                <p className="text-muted-foreground">No bouts left in the queue.</p>
+              ) : (
+                swissQueue.map((round) => (
+                  <div key={round.round} className="space-y-3">
+                    <h3 className="text-sm font-medium text-muted-foreground">
+                      {swissRoundLabel(round.round)}
+                    </h3>
+                    <ul className="space-y-3">
+                      {round.bouts.map((bout) => (
+                        <li key={bout.id}>
+                          <GroupQueueCard bout={bout} fencerName={fencerName} />
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))
+              )
             ) : queue.length === 0 ? (
               <p className="text-muted-foreground">No bouts left in the queue.</p>
             ) : (
