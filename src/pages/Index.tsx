@@ -30,13 +30,14 @@ import { MATCHES_QUERY_KEY } from "@/hooks/useMatches";
 import {
   TOURNAMENT_BOUTS_QUERY_KEY,
   TOURNAMENT_QUERY_KEY,
+  useTournament,
   useTournamentSlot,
 } from "@/hooks/useTournament";
 import { useMatchOutboxCount } from "@/hooks/useMatchOutbox";
 import { enqueueMatchOutbox } from "@/lib/matchOutbox";
 import { newMatchId, saveMatch } from "@/lib/matches";
 import { isNetworkError } from "@/lib/networkError";
-import { saveTournamentBout } from "@/lib/tournamentBouts";
+import { insertKothBout, saveTournamentBout } from "@/lib/tournamentBouts";
 import { playoffOverrideBlock } from "@/lib/tournament/override";
 import { tournamentErrorMessage } from "@/lib/tournaments";
 import type { Fencer } from "@/types/fencing";
@@ -55,13 +56,22 @@ const Index = ({ settings }: IndexProps) => {
   const queryClient = useQueryClient();
   const pendingUploads = useMatchOutboxCount(clubId ?? undefined);
   const [params] = useSearchParams();
-  const slot = useTournamentSlot(params.get("t"), params.get("b"));
-  const tournamentSlot = Boolean(params.get("t") && params.get("b")) && !guestScoreboard;
-  const timeLimit = slot.tournament?.timeLimitSec ?? settings.timeLimit;
-  const pointsLimit = slot.tournament?.pointsLimit ?? settings.pointsLimit;
+  const tournamentId = params.get("t");
+  const boutId = params.get("b");
+  const event = useTournament(tournamentId && !boutId ? tournamentId : undefined);
+  const slot = useTournamentSlot(tournamentId, boutId);
+  const tournamentSlot = Boolean(tournamentId && boutId) && !guestScoreboard;
+  const kothBoard =
+    Boolean(tournamentId) &&
+    !boutId &&
+    (slot.tournament ?? event.tournament)?.format === "king_of_hill" &&
+    !guestScoreboard;
+  const boardTournament = slot.tournament ?? event.tournament;
+  const timeLimit = boardTournament?.timeLimitSec ?? settings.timeLimit;
+  const pointsLimit = boardTournament?.pointsLimit ?? settings.pointsLimit;
   const slotBoutId = slot.bout?.id ?? null;
   const slotFinishedAt = slot.bout?.finishedAt ?? null;
-  const eventLive = slot.tournament?.status === "live";
+  const eventLive = boardTournament?.status === "live";
   const [player1Score, setPlayer1Score] = useState(0);
   const [player2Score, setPlayer2Score] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
@@ -80,17 +90,37 @@ const Index = ({ settings }: IndexProps) => {
   const hydratedSlotKey = useRef<string | null>(null);
 
   const selection = resolveBoutSelection(blueFencerId, redFencerId);
-  const selectionHint = tournamentSlot ? null : boutSelectionMessage(selection);
+  const kothHint =
+    Boolean(tournamentId) && !boutId && boardTournament && !kothBoard
+      ? "Start a bout from the event queue."
+      : kothBoard && boardTournament?.status !== "live"
+        ? "This event is not in progress."
+        : null;
+  const selectionHint = tournamentSlot ? null : kothHint ?? boutSelectionMessage(selection);
   const namedBout = tournamentSlot
     ? Boolean(slot.bout?.blueFencerId && slot.bout?.redFencerId)
-    : !guestScoreboard && selection.status === "ok" && selection.mode === "named";
+    : kothBoard
+      ? !guestScoreboard && selection.status === "ok" && selection.mode === "named"
+      : !guestScoreboard &&
+        !tournamentId &&
+        selection.status === "ok" &&
+        selection.mode === "named";
   const canStartTimer = tournamentSlot
     ? namedBout && eventLive && !winner && !slotFinishedAt
-    : selection.status === "ok" && !winner;
-  const namesLocked = hasMatchStarted || winner !== null || Boolean(slot.bout);
+    : kothBoard
+      ? namedBout && eventLive && !winner && !saved
+      : !tournamentId && selection.status === "ok" && !winner;
+  const namesLocked =
+    hasMatchStarted || winner !== null || Boolean(slot.bout) || (kothBoard && saved);
 
-  const liveBlueName = fencerName(active, blueFencerId, "Fencer 1");
-  const liveRedName = fencerName(active, redFencerId, "Fencer 2");
+  const kothFencers = [...event.roster.active, ...event.roster.archived].filter(
+    (fencer, index, all) =>
+      event.checkedInIds.has(fencer.id) && all.findIndex((row) => row.id === fencer.id) === index
+  );
+  const pickerFencers = kothBoard ? kothFencers : active;
+
+  const liveBlueName = fencerName(pickerFencers, blueFencerId, "Fencer 1");
+  const liveRedName = fencerName(pickerFencers, redFencerId, "Fencer 2");
   const blueName = namesLocked ? (blueNameSnap ?? liveBlueName) : liveBlueName;
   const redName = namesLocked ? (redNameSnap ?? liveRedName) : liveRedName;
 
@@ -168,6 +198,56 @@ const Index = ({ settings }: IndexProps) => {
   const handleSave = async () => {
     if (!namedBout || isTimerRunning || saved || saving) return;
     if (!user || !clubId) return;
+
+    if (kothBoard) {
+      if (!boardTournament || boardTournament.status !== "live") {
+        toast.error("This event is not in progress.");
+        return;
+      }
+      if (selection.status !== "ok" || selection.mode !== "named") return;
+      if (!navigator.onLine) {
+        toast.error("Need a network connection to save a tournament bout.");
+        return;
+      }
+      setSaving(true);
+      const { blueResult, redResult } = scoreResults(player1Score, player2Score);
+      try {
+        await insertKothBout({
+          tournamentId: boardTournament.id,
+          clubId,
+          blueFencerId: selection.blueId,
+          redFencerId: selection.redId,
+          blueName,
+          redName,
+          blueScore: player1Score,
+          redScore: player2Score,
+          blueResult,
+          redResult,
+          timeLimitSec: timeLimit,
+          pointsLimit,
+          remainingSec,
+          startedAt: startedAt ?? new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+        });
+        await queryClient.invalidateQueries({
+          queryKey: [...TOURNAMENT_BOUTS_QUERY_KEY, boardTournament.id],
+        });
+        await queryClient.invalidateQueries({ queryKey: [...TOURNAMENT_QUERY_KEY, boardTournament.id] });
+        setSaved(true);
+        toast.success(blueResult === "draw" ? "Draw saved" : "Victory saved");
+      } catch (error) {
+        toast.error(
+          isNetworkError(error)
+            ? "Need a network connection to save a tournament bout."
+            : tournamentErrorMessage(error, "Could not save the bout.")
+        );
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    if (tournamentId && !tournamentSlot) return;
 
     if (tournamentSlot) {
       if (!slot.bout || !slot.tournament || !slot.bout.blueFencerId || !slot.bout.redFencerId) return;
@@ -295,14 +375,19 @@ const Index = ({ settings }: IndexProps) => {
           <h1 className="text-4xl font-display font-bold text-primary text-center">
             Fencing Scorer
           </h1>
-          {slot.tournament ? (
+          {boardTournament ? (
             <div className="mt-4">
-              <TournamentScoreboardBar name={slot.tournament.name} tournamentId={slot.tournament.id} />
+              <TournamentScoreboardBar name={boardTournament.name} tournamentId={boardTournament.id} />
             </div>
           ) : null}
           {tournamentSlot && slot.notFound ? (
             <p className="text-sm text-destructive text-center mt-2">
               This tournament bout was not found.
+            </p>
+          ) : null}
+          {!boutId && slot.notFound ? (
+            <p className="text-sm text-destructive text-center mt-2">
+              This tournament was not found.
             </p>
           ) : null}
         </div>
@@ -313,7 +398,7 @@ const Index = ({ settings }: IndexProps) => {
             nameControl={
               guestScoreboard ? undefined : (
                 <FencerPicker
-                  fencers={active}
+                  fencers={pickerFencers}
                   value={blueFencerId}
                   excludeId={redFencerId}
                   disabled={namesLocked}
@@ -335,7 +420,7 @@ const Index = ({ settings }: IndexProps) => {
             nameControl={
               guestScoreboard ? undefined : (
                 <FencerPicker
-                  fencers={active}
+                  fencers={pickerFencers}
                   value={redFencerId}
                   excludeId={blueFencerId}
                   disabled={namesLocked}
@@ -355,7 +440,7 @@ const Index = ({ settings }: IndexProps) => {
 
         <div className="flex justify-center mb-4">
           <Timer
-            key={`timer-${timerResetId}-${timeLimit}-${slot.bout?.id ?? "club"}`}
+            key={`timer-${timerResetId}-${timeLimit}-${slot.bout?.id ?? (kothBoard ? "koth" : "club")}`}
             initialMinutes={timeLimit / 60}
             canStart={canStartTimer}
             onStateChange={handleTimerStateChange}
@@ -390,7 +475,7 @@ const Index = ({ settings }: IndexProps) => {
               ? `${winnerLabel} won — timer stays paused`
               : `First to ${pointsLimit} points wins`}
           </div>
-          {guestScoreboard || tournamentSlot || pendingUploads === 0 ? null : (
+          {guestScoreboard || tournamentSlot || kothBoard || pendingUploads === 0 ? null : (
             <div className="text-sm text-muted-foreground">
               {pendingUploads === 1
                 ? "1 bout will upload when you're online."

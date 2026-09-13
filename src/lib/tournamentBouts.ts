@@ -10,6 +10,7 @@ import {
   type GroupsPlayoffDraw,
 } from "@/lib/tournament/groups";
 import { playoffOverrideBlock } from "@/lib/tournament/override";
+import { resolveKothKing } from "@/lib/tournament/kingOfHill";
 import { drawPlayoff, propagatePlayoffSlots, type PlayoffDraft } from "@/lib/tournament/playoff";
 import { computeStandings } from "@/lib/tournament/standings";
 import {
@@ -522,5 +523,61 @@ export async function overrideTournamentBout(
     await syncPlayoffTree(saved.tournamentId);
   }
   if (saved.stage === "swiss") await syncSwiss(saved.tournamentId, { rebuildUnplayed: true });
+  return saved;
+}
+
+export type InsertKothBoutInput = {
+  tournamentId: string;
+  clubId: string;
+  blueFencerId: string;
+  redFencerId: string;
+  blueName: string;
+  redName: string;
+  blueScore: number;
+  redScore: number;
+  blueResult: BoutResult;
+  redResult: BoutResult;
+  timeLimitSec: number;
+  pointsLimit: number;
+  remainingSec: number;
+  startedAt: string;
+  finishedAt: string;
+};
+
+export async function insertKothBout(input: InsertKothBoutInput): Promise<TournamentBout> {
+  const tournament = await getTournament(input.tournamentId);
+  if (!tournament) throw new Error("This tournament was not found.");
+  if (tournament.format !== "king_of_hill") throw new Error("This event is not king of the hill.");
+  if (tournament.status !== "live") throw new Error("This event is not in progress.");
+  if (input.blueFencerId === input.redFencerId) throw new Error("A fencer can't be on both sides.");
+
+  const bouts = await listTournamentBouts(input.tournamentId);
+  const kingId = resolveKothKing(bouts, input.blueFencerId, input.redFencerId);
+  const sortOrder = bouts.reduce((max, bout) => Math.max(max, bout.sortOrder + 1), 0);
+  const rows = await insertTournamentBouts([
+    {
+      id: newTournamentBoutId(),
+      tournament_id: input.tournamentId,
+      club_id: input.clubId,
+      stage: "koth",
+      sort_order: sortOrder,
+      blue_fencer_id: input.blueFencerId,
+      red_fencer_id: input.redFencerId,
+      blue_name: input.blueName,
+      red_name: input.redName,
+      blue_score: input.blueScore,
+      red_score: input.redScore,
+      blue_result: input.blueResult,
+      red_result: input.redResult,
+      time_limit_sec: input.timeLimitSec,
+      points_limit: input.pointsLimit,
+      remaining_sec: input.remainingSec,
+      started_at: input.startedAt,
+      finished_at: input.finishedAt,
+      koth_king_id: kingId,
+    },
+  ]);
+  const saved = rows[0];
+  if (!saved) throw new Error("Could not save the bout.");
   return saved;
 }
