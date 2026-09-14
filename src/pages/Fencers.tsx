@@ -138,7 +138,8 @@ export default function FencersPage() {
                         <FencerStatsButton fencer={fencer} />
                         <Button
                           variant="outline"
-                          size="sm"
+                          size="icon"
+                          aria-label={`Restore ${fencer.name}`}
                           onClick={async () => {
                             try {
                               await fencers.restore.mutateAsync(fencer.id);
@@ -148,8 +149,7 @@ export default function FencersPage() {
                             }
                           }}
                         >
-                          <RotateCcw className="h-4 w-4 mr-2" />
-                          Restore
+                          <RotateCcw className="h-4 w-4" />
                         </Button>
                       </div>
                     </CardContent>
@@ -248,20 +248,19 @@ function FencerRow({
           <FencerStatsButton fencer={fencer} />
           <Button
             variant="outline"
-            size="sm"
+            size="icon"
+            aria-label={`Rename ${fencer.name}`}
             onClick={() => {
               setDraft(fencer.name);
               setEditing(true);
             }}
           >
-            <Pencil className="h-4 w-4 mr-2" />
-            Rename
+            <Pencil className="h-4 w-4" />
           </Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Archive className="h-4 w-4 mr-2" />
-                Archive
+              <Button variant="outline" size="icon" aria-label={`Archive ${fencer.name}`}>
+                <Archive className="h-4 w-4" />
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
@@ -285,10 +284,9 @@ function FencerRow({
 
 function FencerStatsButton({ fencer }: { fencer: Fencer }) {
   return (
-    <Button variant="outline" size="sm" asChild>
+    <Button variant="outline" size="icon" asChild>
       <Link to={`/fencers/${fencer.id}/stats`} aria-label={`${fencer.name} stats`}>
-        <BarChart3 className="h-4 w-4 mr-2" />
-        Stats
+        <BarChart3 className="h-4 w-4" />
       </Link>
     </Button>
   );
