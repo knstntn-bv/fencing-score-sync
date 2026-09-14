@@ -131,12 +131,14 @@ function PlayoffHalf({
   const tone = color === "blue" ? "text-fencer-blue" : "text-fencer-red";
   const nameClass = empty || placeholder ? "text-muted-foreground" : tone;
   return (
-    <div className="flex items-center justify-between gap-3">
-      <span className={`font-medium min-w-0 truncate ${nameClass}`}>{name}</span>
-      <span className="shrink-0 font-mono tabular-nums text-sm">
+    <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
+      <span className={`font-medium min-w-0 truncate ${nameClass}`} title={name}>
+        {name}
+      </span>
+      <span className="font-mono tabular-nums text-sm text-center whitespace-nowrap min-w-[1.5rem]">
         {score == null ? "" : score}
       </span>
-      <span className="shrink-0 text-sm text-muted-foreground min-w-[5.5rem] text-right">
+      <span className="text-sm text-muted-foreground min-w-0 truncate text-right">
         {label ?? ""}
       </span>
     </div>
