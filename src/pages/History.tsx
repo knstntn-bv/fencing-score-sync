@@ -1,6 +1,7 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { format } from "date-fns";
-import { History as HistoryIcon } from "lucide-react";
+import { BarChart3, History as HistoryIcon } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { ClubPageHeader } from "@/components/ClubNav";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -11,14 +12,54 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/context/AuthContext";
 import { useMatches } from "@/hooks/useMatches";
 import { listHistoryPeople, matchOutcomeLabel } from "@/lib/matches";
+import { StatsPanel } from "@/components/StatsPanel";
 import type { Match } from "@/types/fencing";
 
 const ALL_FENCERS = "all";
 
 export default function HistoryPage() {
+  const [params, setSearchParams] = useSearchParams();
+  const tab = params.get("tab") === "stats" ? "stats" : "history";
+
+  return (
+    <div className="min-h-screen bg-background p-4">
+      <div className="max-w-2xl mx-auto">
+        <ClubPageHeader
+          title={tab === "stats" ? "Stats" : "History"}
+          subtitle={
+            tab === "stats"
+              ? "Record and frequent opponents, by fencer."
+              : "Saved bouts, newest first."
+          }
+          icon={tab === "stats" ? BarChart3 : HistoryIcon}
+        />
+        <Tabs
+          value={tab}
+          onValueChange={(value) => {
+            setSearchParams(value === "stats" ? { tab: "stats" } : {}, { replace: true });
+          }}
+        >
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="history">History</TabsTrigger>
+            <TabsTrigger value="stats">Stats</TabsTrigger>
+          </TabsList>
+          <TabsContent value="history">
+            <HistoryPanel />
+          </TabsContent>
+          <TabsContent value="stats">
+            <StatsPanel />
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+}
+
+function HistoryPanel() {
   const { configured } = useAuth();
   const history = useMatches();
   const [fencerId, setFencerId] = useState(ALL_FENCERS);
@@ -32,15 +73,11 @@ export default function HistoryPage() {
   }, [fencerId, history.matches]);
 
   if (!configured) {
-    return (
-      <HistoryShell>
-        <p className="text-muted-foreground">Connect Supabase to see bout history.</p>
-      </HistoryShell>
-    );
+    return <p className="text-muted-foreground">Connect Supabase to see bout history.</p>;
   }
 
   return (
-    <HistoryShell>
+    <>
       {people.length > 0 ? (
         <div className="mb-6 space-y-2">
           <Label htmlFor="history-fencer">Fencer</Label>
@@ -79,22 +116,7 @@ export default function HistoryPage() {
           ))}
         </ul>
       )}
-    </HistoryShell>
-  );
-}
-
-function HistoryShell({ children }: { children: ReactNode }) {
-  return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-2xl mx-auto">
-        <ClubPageHeader
-          title="History"
-          subtitle="Saved bouts, newest first."
-          icon={HistoryIcon}
-        />
-        {children}
-      </div>
-    </div>
+    </>
   );
 }
 

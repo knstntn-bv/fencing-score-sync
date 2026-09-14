@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Archive, Check, Pencil, RotateCcw, UserPlus, Users, X } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Archive, BarChart3, Check, Pencil, RotateCcw, UserPlus, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { ClubPageHeader } from "@/components/ClubNav";
 import {
@@ -129,25 +130,28 @@ export default function FencersPage() {
                 <li key={fencer.id}>
                   <Card className="opacity-80">
                     <CardContent className="p-4 flex items-center justify-between gap-3">
-                      <div>
+                      <div className="min-w-0">
                         <p className="font-medium">{fencer.name}</p>
                         <p className="text-xs text-muted-foreground">Archived</p>
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={async () => {
-                          try {
-                            await fencers.restore.mutateAsync(fencer.id);
-                            toast.success("Fencer restored");
-                          } catch (error) {
-                            toast.error(fencers.mutationError(error));
-                          }
-                        }}
-                      >
-                        <RotateCcw className="h-4 w-4 mr-2" />
-                        Restore
-                      </Button>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <FencerStatsButton fencer={fencer} />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              await fencers.restore.mutateAsync(fencer.id);
+                              toast.success("Fencer restored");
+                            } catch (error) {
+                              toast.error(fencers.mutationError(error));
+                            }
+                          }}
+                        >
+                          <RotateCcw className="h-4 w-4 mr-2" />
+                          Restore
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
                 </li>
@@ -239,8 +243,9 @@ function FencerRow({
   return (
     <Card>
       <CardContent className="p-4 flex items-center justify-between gap-3">
-        <p className="font-medium text-lg">{fencer.name}</p>
-        <div className="flex gap-2">
+        <p className="font-medium text-lg min-w-0 truncate">{fencer.name}</p>
+        <div className="flex flex-wrap justify-end gap-2">
+          <FencerStatsButton fencer={fencer} />
           <Button
             variant="outline"
             size="sm"
@@ -275,5 +280,16 @@ function FencerRow({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function FencerStatsButton({ fencer }: { fencer: Fencer }) {
+  return (
+    <Button variant="outline" size="sm" asChild>
+      <Link to={`/fencers/${fencer.id}/stats`} aria-label={`${fencer.name} stats`}>
+        <BarChart3 className="h-4 w-4 mr-2" />
+        Stats
+      </Link>
+    </Button>
   );
 }
