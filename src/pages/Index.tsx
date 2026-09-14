@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Settings } from "lucide-react";
+import { ArrowLeft, Settings, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { ClubNav } from "@/components/ClubNav";
@@ -377,26 +377,41 @@ const Index = ({ settings }: IndexProps) => {
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <div className="flex justify-end gap-2 mb-3">
-            {guestScoreboard ? (
-              <Button variant="outline" onClick={() => exitGuestBout()}>
-                Sign in
+          <div className="flex items-center gap-2 mb-3">
+            {guestScoreboard ? null : tournamentId ? (
+              <Button asChild variant="outline" size="icon" aria-label="Back to event">
+                <Link to={`/tournaments/${tournamentId}`}>
+                  <ArrowLeft className="h-4 w-4" />
+                </Link>
               </Button>
             ) : (
-              <ClubNav />
-            )}
-            <Link to="/settings">
-              <Button variant="outline" size="icon" aria-label="Settings">
-                <Settings className="h-4 w-4" />
+              <Button asChild variant="outline" size="icon" aria-label="Tournaments">
+                <Link to="/tournaments">
+                  <Trophy className="h-4 w-4" />
+                </Link>
               </Button>
-            </Link>
+            )}
+            <div className="flex justify-end gap-2 ml-auto">
+              {guestScoreboard ? (
+                <Button variant="outline" onClick={() => exitGuestBout()}>
+                  Sign in
+                </Button>
+              ) : (
+                <ClubNav exclude={["/tournaments"]} />
+              )}
+              <Link to="/settings">
+                <Button variant="outline" size="icon" aria-label="Settings">
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
           </div>
           <h1 className="text-4xl font-display font-bold text-primary text-center">
             Fencing Scorer
           </h1>
           {boardTournament ? (
             <div className="mt-4">
-              <TournamentScoreboardBar name={boardTournament.name} tournamentId={boardTournament.id} />
+              <TournamentScoreboardBar name={boardTournament.name} />
             </div>
           ) : null}
           {tournamentSlot && slot.notFound ? (

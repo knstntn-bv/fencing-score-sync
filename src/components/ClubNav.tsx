@@ -23,12 +23,19 @@ function isCurrent(pathname: string, to: string): boolean {
   return pathname === to;
 }
 
-export function ClubNav({ className }: { className?: string }) {
+export function ClubNav({
+  className,
+  exclude = [],
+}: {
+  className?: string;
+  exclude?: string[];
+}) {
   const { pathname } = useLocation();
+  const items = LINKS.filter((item) => !exclude.includes(item.to));
 
   return (
     <nav className={cn("flex flex-wrap justify-end gap-2", className)} aria-label="Club">
-      {LINKS.map((item) => {
+      {items.map((item) => {
         const Icon = item.icon;
         const current = isCurrent(pathname, item.to);
         return (
