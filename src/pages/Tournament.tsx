@@ -3,7 +3,6 @@ import { Link, useParams } from "react-router-dom";
 import { format } from "date-fns";
 import { ArrowLeft, Trophy } from "lucide-react";
 import { toast } from "sonner";
-import { ClubNav } from "@/components/ClubNav";
 import { OverrideBoutDialog } from "@/components/OverrideBoutDialog";
 import { PlayoffBracket } from "@/components/PlayoffBracket";
 import {
@@ -1118,19 +1117,13 @@ function TournamentShell({
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  {nameControl ?? (
-                    <h1 className="text-3xl font-display font-bold text-primary flex items-center gap-2">
-                      <Trophy className="h-7 w-7 shrink-0" />
-                      Tournament
-                    </h1>
-                  )}
-                </div>
-                <ClubNav className="hidden sm:flex shrink-0" />
-              </div>
-              <ClubNav className="flex sm:hidden mt-3" />
+            <div className="min-w-0 flex-1">
+              {nameControl ?? (
+                <h1 className="text-3xl font-display font-bold text-primary flex items-center gap-2">
+                  <Trophy className="h-7 w-7 shrink-0" />
+                  Tournament
+                </h1>
+              )}
             </div>
           </div>
         </div>

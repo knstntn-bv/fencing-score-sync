@@ -33,6 +33,7 @@ import {
   useTournament,
   useTournamentSlot,
 } from "@/hooks/useTournament";
+import { useTournaments } from "@/hooks/useTournaments";
 import { useMatchOutboxCount } from "@/hooks/useMatchOutbox";
 import { enqueueMatchOutbox } from "@/lib/matchOutbox";
 import { newMatchId, saveMatch } from "@/lib/matches";
@@ -61,6 +62,8 @@ const Index = ({ settings }: IndexProps) => {
   const boutId = params.get("b");
   const event = useTournament(tournamentId && !boutId ? tournamentId : undefined);
   const slot = useTournamentSlot(tournamentId, boutId);
+  const tournaments = useTournaments();
+  const hasOpenTournament = tournaments.tournaments.some((row) => row.status !== "done");
   const tournamentSlot = Boolean(tournamentId && boutId) && !guestScoreboard;
   const kothBoard =
     Boolean(tournamentId) &&
@@ -385,7 +388,13 @@ const Index = ({ settings }: IndexProps) => {
                 </Link>
               </Button>
             ) : (
-              <Button asChild variant="outline" size="icon" aria-label="Tournaments">
+              <Button
+                asChild
+                variant="outline"
+                size="icon"
+                aria-label={hasOpenTournament ? "Tournaments, event in progress" : "Tournaments"}
+                className={hasOpenTournament ? "border-primary text-primary hover:text-primary" : undefined}
+              >
                 <Link to="/tournaments">
                   <Trophy className="h-4 w-4" />
                 </Link>
