@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import AuthGate from "@/components/AuthGate";
 import ClubRoute from "@/components/ClubRoute";
@@ -12,8 +12,8 @@ import { readSettings, writeSettings, type ClubSettings } from "@/lib/settings";
 import Index from "./pages/Index";
 import Settings from "./pages/Settings";
 import Fencers from "./pages/Fencers";
+import FencerStats from "./pages/FencerStats";
 import History from "./pages/History";
-import Stats from "./pages/Stats";
 import Tournaments from "./pages/Tournaments";
 import Tournament from "./pages/Tournament";
 import NotFound from "./pages/NotFound";
@@ -52,6 +52,14 @@ const App = () => {
                   }
                 />
                 <Route
+                  path="/fencers/:id/stats"
+                  element={
+                    <ClubRoute>
+                      <FencerStats />
+                    </ClubRoute>
+                  }
+                />
+                <Route
                   path="/tournaments"
                   element={
                     <ClubRoute>
@@ -79,7 +87,7 @@ const App = () => {
                   path="/stats"
                   element={
                     <ClubRoute>
-                      <Stats />
+                      <Navigate to="/history?tab=stats" replace />
                     </ClubRoute>
                   }
                 />

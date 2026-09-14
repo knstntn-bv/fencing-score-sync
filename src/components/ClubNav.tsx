@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { ArrowLeft, BarChart3, History as HistoryIcon, Trophy, Users } from "lucide-react";
+import { ArrowLeft, History as HistoryIcon, Trophy, Users } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -8,8 +8,20 @@ const LINKS: { to: string; label: string; icon: LucideIcon }[] = [
   { to: "/fencers", label: "Fencers", icon: Users },
   { to: "/tournaments", label: "Tournaments", icon: Trophy },
   { to: "/history", label: "History", icon: HistoryIcon },
-  { to: "/stats", label: "Stats", icon: BarChart3 },
 ];
+
+function isCurrent(pathname: string, to: string): boolean {
+  if (to === "/tournaments") {
+    return pathname === "/tournaments" || pathname.startsWith("/tournaments/");
+  }
+  if (to === "/fencers") {
+    return pathname === "/fencers" || pathname.startsWith("/fencers/");
+  }
+  if (to === "/history") {
+    return pathname === "/history" || pathname === "/stats";
+  }
+  return pathname === to;
+}
 
 export function ClubNav({ className }: { className?: string }) {
   const { pathname } = useLocation();
@@ -18,10 +30,7 @@ export function ClubNav({ className }: { className?: string }) {
     <nav className={cn("flex flex-wrap justify-end gap-2", className)} aria-label="Club">
       {LINKS.map((item) => {
         const Icon = item.icon;
-        const current =
-          item.to === "/tournaments"
-            ? pathname === "/tournaments" || pathname.startsWith("/tournaments/")
-            : pathname === item.to;
+        const current = isCurrent(pathname, item.to);
         return (
           <Button
             key={item.to}
@@ -45,16 +54,20 @@ export function ClubPageHeader({
   title,
   subtitle,
   icon: Icon,
+  backTo = "/",
+  backLabel = "Back to scoreboard",
 }: {
   title: string;
   subtitle: string;
   icon: LucideIcon;
+  backTo?: string;
+  backLabel?: string;
 }) {
   return (
     <div className="mb-8">
       <div className="flex items-start gap-4">
-        <Link to="/" className="shrink-0">
-          <Button variant="outline" size="icon" aria-label="Back to scoreboard">
+        <Link to={backTo} className="shrink-0">
+          <Button variant="outline" size="icon" aria-label={backLabel}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>

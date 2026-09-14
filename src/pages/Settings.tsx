@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, BarChart3, History as HistoryIcon, LogOut, Save, Trophy, Users } from "lucide-react";
+import { ArrowLeft, History as HistoryIcon, LogOut, Save, Trophy, Users } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -153,13 +153,7 @@ const Settings = ({ settings, onSave }: SettingsProps) => {
                 <Button asChild variant="secondary" className="w-full">
                   <Link to="/history">
                     <HistoryIcon className="h-4 w-4 mr-2" />
-                    Bout history
-                  </Link>
-                </Button>
-                <Button asChild variant="secondary" className="w-full">
-                  <Link to="/stats">
-                    <BarChart3 className="h-4 w-4 mr-2" />
-                    Fencer stats
+                    History & stats
                   </Link>
                 </Button>
                 <Button variant="outline" className="w-full" onClick={() => void signOut()}>
