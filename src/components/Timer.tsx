@@ -57,18 +57,12 @@ export default function Timer({
   const timerColor = timeLeft <= 10 ? "text-destructive" : "text-timer-fg";
 
   return (
-    <div className="flex flex-col items-center space-y-4">
+    <div className="flex flex-col items-center">
       <Card className={`p-6 flex flex-col items-center space-y-4 transition-all duration-300 border-2 ${
         isRunning 
           ? 'bg-background/90 border-primary shadow-lg shadow-primary/20' 
           : 'bg-timer-bg border-primary/50'
       }`}>
-        <h3 className={`text-lg font-display font-semibold transition-colors duration-300 ${
-          isRunning ? 'text-primary' : 'text-timer-fg'
-        }`}>
-          Match Timer
-        </h3>
-        
         <div className={`text-6xl font-mono font-bold transition-colors duration-300 ${
           isRunning 
             ? (timerColor === "text-destructive" ? "text-destructive" : "text-primary") 
