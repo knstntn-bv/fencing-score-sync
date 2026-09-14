@@ -78,18 +78,12 @@ export function ClubPageHeader({
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h1 className="text-3xl font-display font-bold text-primary flex items-center gap-2">
-                <Icon className="h-7 w-7 shrink-0" />
-                {title}
-              </h1>
-              <p className="text-muted-foreground">{subtitle}</p>
-            </div>
-            <ClubNav className="hidden sm:flex shrink-0" />
-          </div>
-          <ClubNav className="flex sm:hidden mt-3" />
+        <div className="min-w-0">
+          <h1 className="text-3xl font-display font-bold text-primary flex items-center gap-2">
+            <Icon className="h-7 w-7 shrink-0" />
+            {title}
+          </h1>
+          <p className="text-muted-foreground">{subtitle}</p>
         </div>
       </div>
     </div>
