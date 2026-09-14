@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { ArrowLeft, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { OverrideBoutDialog } from "@/components/OverrideBoutDialog";
+import { BoutScoreline } from "@/components/BoutScoreline";
 import { PlayoffBracket } from "@/components/PlayoffBracket";
 import {
   AlertDialog,
@@ -1075,13 +1076,13 @@ function FinishedBoutRow({
                 {format(new Date(bout.finishedAt), "d MMM yyyy, HH:mm")}
               </p>
             ) : null}
-            <div className="flex items-center justify-between gap-3 text-lg font-medium">
-              <span className="text-fencer-blue min-w-0 truncate">{bout.blueName}</span>
-              <span className="font-mono tabular-nums shrink-0">
-                {bout.blueScore} – {bout.redScore}
-              </span>
-              <span className="text-fencer-red min-w-0 truncate text-right">{bout.redName}</span>
-            </div>
+            <BoutScoreline
+              className="text-lg font-medium"
+              blueName={bout.blueName}
+              redName={bout.redName}
+              blueScore={bout.blueScore}
+              redScore={bout.redScore}
+            />
             <p className="text-sm text-muted-foreground">{outcome}</p>
           </button>
         </CardContent>

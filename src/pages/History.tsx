@@ -3,6 +3,7 @@ import { format } from "date-fns";
 import { BarChart3, History as HistoryIcon } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { ClubPageHeader } from "@/components/ClubNav";
+import { BoutScoreline } from "@/components/BoutScoreline";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import {
@@ -127,13 +128,13 @@ function HistoryRow({ match }: { match: Match }) {
         <p className="text-xs text-muted-foreground">
           {format(new Date(match.finishedAt), "d MMM yyyy, HH:mm")}
         </p>
-        <div className="flex items-center justify-between gap-3 text-lg font-medium">
-          <span className="text-fencer-blue min-w-0 truncate">{match.blueName}</span>
-          <span className="font-mono tabular-nums shrink-0">
-            {match.blueScore} – {match.redScore}
-          </span>
-          <span className="text-fencer-red min-w-0 truncate text-right">{match.redName}</span>
-        </div>
+        <BoutScoreline
+          className="text-lg font-medium"
+          blueName={match.blueName}
+          redName={match.redName}
+          blueScore={match.blueScore}
+          redScore={match.redScore}
+        />
         <p className="text-sm text-muted-foreground">{matchOutcomeLabel(match)}</p>
       </CardContent>
     </Card>
