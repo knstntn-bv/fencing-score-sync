@@ -64,13 +64,11 @@ const Settings = ({ settings, onSave }: SettingsProps) => {
       <div className="max-w-2xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
-          {noClub ? null : (
-            <Link to="/">
-              <Button variant="outline" size="icon" aria-label="Back to scoreboard">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
-          )}
+          <Link to="/">
+            <Button variant="outline" size="icon" aria-label="Back to scoreboard">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
           {guestScoreboard ? (
             <Button
               variant="outline"
