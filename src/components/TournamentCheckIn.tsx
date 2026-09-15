@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Fencer } from "@/types/fencing";
 import type { TournamentParticipant } from "@/types/tournament";
 
@@ -241,8 +240,8 @@ function RosterCheckInDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle>From roster</DialogTitle>
           <DialogDescription>Choose club fencers who are fencing today.</DialogDescription>
         </DialogHeader>
@@ -257,7 +256,7 @@ function RosterCheckInDialog({
         ) : available.length === 0 ? (
           <p className="text-muted-foreground">Everyone from the roster is already checked in.</p>
         ) : (
-          <ScrollArea className="max-h-[50vh] pr-3">
+          <div className="max-h-[min(24rem,calc(85vh-11rem))] overflow-y-auto overscroll-contain -mx-1 px-1">
             <ul className="space-y-3">
               {available.map((fencer) => {
                 const checked = selected.includes(fencer.id);
@@ -284,9 +283,9 @@ function RosterCheckInDialog({
                 );
               })}
             </ul>
-          </ScrollArea>
+          </div>
         )}
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
