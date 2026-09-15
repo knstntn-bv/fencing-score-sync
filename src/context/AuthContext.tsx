@@ -9,12 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import {
-  createOwnClub,
-  getOwnProfile,
-  resolveCurrentClubId,
-  saveOwnProfile,
-} from "@/lib/clubs";
+import { createOwnClub, loadOwnAccountWithRetry, saveOwnProfile } from "@/lib/clubs";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 const GUEST_BOUT_KEY = "fencing-scorer:v1:guest-bout";
@@ -139,11 +134,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccountLoading(true);
     setAccountError(null);
 
-    Promise.all([getOwnProfile(), resolveCurrentClubId()])
-      .then(([profile, currentClubId]) => {
+    loadOwnAccountWithRetry()
+      .then((account) => {
         if (cancelled) return;
-        setProfileName(profile?.name ?? null);
-        setClubId(currentClubId);
+        setProfileName(account.profile?.name ?? null);
+        setClubId(account.clubId);
         setAccountLoading(false);
       })
       .catch(() => {
@@ -175,7 +170,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!supabase) {
       return { error: "Supabase is not configured.", needsEmailConfirmation: false };
     }
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const emailRedirectTo = new URL(import.meta.env.BASE_URL || "/", window.location.origin).toString();
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo },
+    });
     if (error) {
       return { error: error.message, needsEmailConfirmation: false };
     }

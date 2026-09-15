@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,11 +8,22 @@ import { useAuth } from "@/context/AuthContext";
 
 export default function Onboarding() {
   const { clubId, completeSetup, signOut } = useAuth();
+  const navigate = useNavigate();
   const [name, setName] = useState("");
   const [clubName, setClubName] = useState("");
   const [busy, setBusy] = useState<"club" | "skip" | "save" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const needsClubChoice = !clubId;
+
+  const finish = async (displayName: string, nextClubName: string | null) => {
+    const result = await completeSetup(displayName, nextClubName);
+    if (result.error) {
+      setError(result.error);
+      return false;
+    }
+    navigate("/", { replace: true });
+    return true;
+  };
 
   const handleCreateClub = async (event: FormEvent) => {
     event.preventDefault();
@@ -25,8 +37,7 @@ export default function Onboarding() {
       return;
     }
     setBusy("club");
-    const result = await completeSetup(name.trim(), clubName.trim());
-    if (result.error) setError(result.error);
+    await finish(name.trim(), clubName.trim());
     setBusy(null);
   };
 
@@ -37,8 +48,7 @@ export default function Onboarding() {
       return;
     }
     setBusy("skip");
-    const result = await completeSetup(name.trim(), null);
-    if (result.error) setError(result.error);
+    await finish(name.trim(), null);
     setBusy(null);
   };
 
@@ -50,8 +60,7 @@ export default function Onboarding() {
       return;
     }
     setBusy("save");
-    const result = await completeSetup(name.trim(), null);
-    if (result.error) setError(result.error);
+    await finish(name.trim(), null);
     setBusy(null);
   };
 
@@ -109,7 +118,7 @@ export default function Onboarding() {
                   {busy === "skip" ? "Saving…" : "Skip"}
                 </Button>
                 <p className="text-xs text-muted-foreground text-center">
-                  Skip keeps your name and opens settings. You can create a club later.
+                  Skip keeps your name and opens the scoreboard. You can create a club later in Settings.
                 </p>
               </>
             ) : (

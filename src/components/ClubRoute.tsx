@@ -8,7 +8,7 @@ export default function ClubRoute({ children }: { children: ReactNode }) {
     return <Navigate to="/" replace />;
   }
   if (user && !clubId) {
-    return <Navigate to="/settings" replace />;
+    return <Navigate to="/" replace />;
   }
   return <>{children}</>;
 }

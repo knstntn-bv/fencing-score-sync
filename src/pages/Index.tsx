@@ -53,7 +53,9 @@ interface IndexProps {
 const Index = ({ settings }: IndexProps) => {
   const { user, clubId, guestBout, exitGuestBout } = useAuth();
   const guestScoreboard = guestBout && !user;
-  const showClubChrome = !guestScoreboard && (!user || Boolean(clubId));
+  const signedInWithoutClub = Boolean(user && !clubId);
+  const localOnlyBoard = guestScoreboard || signedInWithoutClub;
+  const showClubChrome = !localOnlyBoard;
   const { active } = useFencers();
   const queryClient = useQueryClient();
   const pendingUploads = useMatchOutboxCount(clubId ?? undefined);
@@ -64,12 +66,12 @@ const Index = ({ settings }: IndexProps) => {
   const slot = useTournamentSlot(tournamentId, boutId);
   const tournaments = useTournaments();
   const hasOpenTournament = tournaments.tournaments.some((row) => row.status !== "done");
-  const tournamentSlot = Boolean(tournamentId && boutId) && !guestScoreboard;
+  const tournamentSlot = Boolean(tournamentId && boutId) && !localOnlyBoard;
   const kothBoard =
     Boolean(tournamentId) &&
     !boutId &&
     (slot.tournament ?? event.tournament)?.format === "king_of_hill" &&
-    !guestScoreboard;
+    !localOnlyBoard;
   const boardTournament = slot.tournament ?? event.tournament;
   const timeLimit = boardTournament?.timeLimitSec ?? settings.timeLimit;
   const pointsLimit = boardTournament?.pointsLimit ?? settings.pointsLimit;
@@ -104,8 +106,8 @@ const Index = ({ settings }: IndexProps) => {
   const namedBout = tournamentSlot
     ? Boolean(slot.bout?.blueFencerId && slot.bout?.redFencerId)
     : kothBoard
-      ? !guestScoreboard && selection.status === "ok" && selection.mode === "named"
-      : !guestScoreboard &&
+      ? !localOnlyBoard && selection.status === "ok" && selection.mode === "named"
+      : !localOnlyBoard &&
         !tournamentId &&
         selection.status === "ok" &&
         selection.mode === "named";
@@ -443,7 +445,7 @@ const Index = ({ settings }: IndexProps) => {
           <ScoreDisplay
             playerName={blueName}
             nameControl={
-              guestScoreboard ? undefined : (
+              localOnlyBoard ? undefined : (
                 <FencerPicker
                   fencers={pickerFencers}
                   value={blueFencerId}
@@ -465,7 +467,7 @@ const Index = ({ settings }: IndexProps) => {
           <ScoreDisplay
             playerName={redName}
             nameControl={
-              guestScoreboard ? undefined : (
+              localOnlyBoard ? undefined : (
                 <FencerPicker
                   fencers={redPickerFencers}
                   value={redFencerId}
@@ -496,7 +498,7 @@ const Index = ({ settings }: IndexProps) => {
         </div>
 
         <div className="flex flex-col sm:flex-row justify-center items-center gap-3 mt-4">
-          {guestScoreboard ? null : (
+          {localOnlyBoard ? null : (
             <SaveResultButton
               anonymous={!namedBout}
               timerRunning={isTimerRunning}
@@ -514,6 +516,10 @@ const Index = ({ settings }: IndexProps) => {
             <div className="text-sm text-muted-foreground">
               Quick bout — results are not saved.
             </div>
+          ) : signedInWithoutClub ? (
+            <div className="text-sm text-muted-foreground">
+              Results are not saved until you create a club in Settings.
+            </div>
           ) : selectionHint ? (
             <div className="text-sm text-destructive">{selectionHint}</div>
           ) : null}
@@ -522,7 +528,7 @@ const Index = ({ settings }: IndexProps) => {
               ? `${winnerLabel} won — timer stays paused`
               : `First to ${pointsLimit} points wins`}
           </div>
-          {guestScoreboard || tournamentSlot || kothBoard || pendingUploads === 0 ? null : (
+          {localOnlyBoard || tournamentSlot || kothBoard || pendingUploads === 0 ? null : (
             <div className="text-sm text-muted-foreground">
               {pendingUploads === 1
                 ? "1 bout will upload when you're online."

@@ -92,3 +92,33 @@ export async function getClubName(clubId: string): Promise<string> {
   if (error) throw error;
   return data.name;
 }
+
+export type OwnAccount = {
+  profile: Profile | null;
+  clubId: string | null;
+};
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+export async function loadOwnAccount(): Promise<OwnAccount> {
+  await requireSupabase().auth.getSession();
+  const [profile, clubId] = await Promise.all([getOwnProfile(), resolveCurrentClubId()]);
+  return { profile, clubId };
+}
+
+export async function loadOwnAccountWithRetry(attempts = 4): Promise<OwnAccount> {
+  let lastError: unknown;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      return await loadOwnAccount();
+    } catch (error) {
+      lastError = error;
+      if (i < attempts - 1) await wait(200 * (i + 1));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Could not load data.");
+}
