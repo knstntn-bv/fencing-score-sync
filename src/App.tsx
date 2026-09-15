@@ -4,7 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "@/context/AuthContext";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
 import AuthGate from "@/components/AuthGate";
 import ClubRoute from "@/components/ClubRoute";
 import { useMatchOutboxFlush } from "@/hooks/useMatchOutbox";
@@ -25,6 +25,14 @@ function OutboxFlush() {
   return null;
 }
 
+function ScoreboardRoute({ settings }: { settings: ClubSettings }) {
+  const { user, clubId } = useAuth();
+  if (user && !clubId) {
+    return <Navigate to="/settings" replace />;
+  }
+  return <Index settings={settings} />;
+}
+
 const App = () => {
   const [settings, setSettings] = useState<ClubSettings>(readSettings);
 
@@ -42,7 +50,7 @@ const App = () => {
           <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <AuthGate>
               <Routes>
-                <Route path="/" element={<Index settings={settings} />} />
+                <Route path="/" element={<ScoreboardRoute settings={settings} />} />
                 <Route
                   path="/fencers"
                   element={

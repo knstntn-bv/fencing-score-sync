@@ -53,6 +53,7 @@ interface IndexProps {
 const Index = ({ settings }: IndexProps) => {
   const { user, clubId, guestBout, exitGuestBout } = useAuth();
   const guestScoreboard = guestBout && !user;
+  const showClubChrome = !guestScoreboard && (!user || Boolean(clubId));
   const { active } = useFencers();
   const queryClient = useQueryClient();
   const pendingUploads = useMatchOutboxCount(clubId ?? undefined);
@@ -384,7 +385,7 @@ const Index = ({ settings }: IndexProps) => {
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-3">
-            {guestScoreboard ? null : tournamentId ? (
+            {!showClubChrome ? null : tournamentId ? (
               <Button asChild variant="outline" size="icon" aria-label="Back to event">
                 <Link to={`/tournaments/${tournamentId}`}>
                   <ArrowLeft className="h-4 w-4" />
@@ -408,9 +409,9 @@ const Index = ({ settings }: IndexProps) => {
                 <Button variant="outline" onClick={() => exitGuestBout()}>
                   Sign in
                 </Button>
-              ) : (
+              ) : showClubChrome ? (
                 <ClubNav exclude={["/tournaments"]} />
-              )}
+              ) : null}
               <Link to="/settings">
                 <Button variant="outline" size="icon" aria-label="Settings">
                   <Settings className="h-4 w-4" />

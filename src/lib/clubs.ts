@@ -9,6 +9,10 @@ export type ClubMembership = {
   createdAt: string;
 };
 
+export type Profile = {
+  name: string;
+};
+
 type ClubMemberRow = Pick<
   Database["public"]["Tables"]["club_members"]["Row"],
   "club_id" | "role" | "created_at"
@@ -20,6 +24,19 @@ function mapMembership(row: ClubMemberRow): ClubMembership {
     role: row.role,
     createdAt: row.created_at,
   };
+}
+
+function mapRpcError(error: unknown, fallback: string): Error {
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
+    const message = error.message;
+    if (message.includes("Already in a club")) return new Error("You already belong to a club.");
+    if (message.includes("Club name is required")) return new Error("Enter a club name.");
+    if (message.includes("Name is required")) return new Error("Enter your name.");
+    if (message.includes("Profile name is required")) return new Error("Enter your name first.");
+    if (message) return new Error(message);
+  }
+  if (error instanceof Error && error.message) return error;
+  return new Error(fallback);
 }
 
 export async function listOwnMemberships(): Promise<ClubMembership[]> {
@@ -41,17 +58,28 @@ export function pickCurrentClubId(memberships: ClubMembership[]): string | null 
   return ranked[0].clubId;
 }
 
-export async function ensureOwnClub(): Promise<string> {
-  const { data, error } = await requireSupabase().rpc("ensure_own_club");
+export async function resolveCurrentClubId(): Promise<string | null> {
+  return pickCurrentClubId(await listOwnMemberships());
+}
+
+export async function getOwnProfile(): Promise<Profile | null> {
+  const { data, error } = await requireSupabase().from("profiles").select("name").maybeSingle();
   if (error) throw error;
-  if (!data) throw new Error("Could not load data.");
+  return data ? { name: data.name } : null;
+}
+
+export async function saveOwnProfile(name: string): Promise<string> {
+  const { data, error } = await requireSupabase().rpc("save_own_profile", { p_name: name });
+  if (error) throw mapRpcError(error, "Could not save your name.");
+  if (!data) throw new Error("Could not save your name.");
   return data;
 }
 
-export async function resolveCurrentClubId(): Promise<string> {
-  const existing = pickCurrentClubId(await listOwnMemberships());
-  if (existing) return existing;
-  return ensureOwnClub();
+export async function createOwnClub(name: string): Promise<string> {
+  const { data, error } = await requireSupabase().rpc("create_own_club", { p_name: name });
+  if (error) throw mapRpcError(error, "Could not create the club.");
+  if (!data) throw new Error("Could not create the club.");
+  return data;
 }
 
 export async function getClubName(clubId: string): Promise<string> {

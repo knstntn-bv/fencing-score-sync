@@ -2,9 +2,11 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 import Login from "@/pages/Login";
+import Onboarding from "@/pages/Onboarding";
 
 export default function AuthGate({ children }: { children: ReactNode }) {
-  const { configured, loading, user, clubError, retryClub, signOut, guestBout } = useAuth();
+  const { configured, loading, user, profileName, accountError, retryAccount, signOut, guestBout } =
+    useAuth();
 
   if (loading) {
     return (
@@ -18,13 +20,13 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     return <Login />;
   }
 
-  if (configured && user && clubError) {
+  if (configured && user && accountError) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="space-y-4 text-center">
-          <p className="text-muted-foreground">{clubError}</p>
+          <p className="text-muted-foreground">{accountError}</p>
           <div className="flex justify-center gap-2">
-            <Button variant="outline" onClick={() => retryClub()}>
+            <Button variant="outline" onClick={() => retryAccount()}>
               Retry
             </Button>
             <Button variant="outline" onClick={() => void signOut()}>
@@ -34,6 +36,10 @@ export default function AuthGate({ children }: { children: ReactNode }) {
         </div>
       </div>
     );
+  }
+
+  if (configured && user && !profileName) {
+    return <Onboarding />;
   }
 
   return <>{children}</>;

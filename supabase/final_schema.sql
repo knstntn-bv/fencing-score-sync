@@ -153,44 +153,65 @@ create trigger club_members_cleanup_empty_club
   for each row
   execute procedure public.club_members_cleanup_empty_club();
 
-create or replace function public.handle_new_user()
-returns trigger
+create table public.profiles (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  name text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint profiles_name_not_blank check (char_length(trim(name)) > 0)
+);
+
+create trigger profiles_set_updated_at
+  before update on public.profiles
+  for each row
+  execute procedure public.set_updated_at();
+
+create or replace function public.save_own_profile(p_name text)
+returns text
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  new_club_id uuid;
+  normalized text;
 begin
-  if exists (
-    select 1 from public.club_members where user_id = new.id
-  ) then
-    return new;
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
   end if;
 
-  insert into public.clubs (name)
-  values ('Fencing Club')
-  returning id into new_club_id;
+  normalized := nullif(trim(regexp_replace(p_name, '\s+', ' ', 'g')), '');
+  if normalized is null then
+    raise exception 'Name is required';
+  end if;
 
-  insert into public.club_members (club_id, user_id, role)
-  values (new_club_id, new.id, 'owner');
+  insert into public.profiles (user_id, name)
+  values (auth.uid(), normalized)
+  on conflict (user_id) do update
+    set name = excluded.name;
 
-  return new;
+  return normalized;
 end;
 $$;
 
-create or replace function public.ensure_own_club()
+create or replace function public.create_own_club(p_name text)
 returns uuid
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
+  club_name text;
+  profile_name text;
   existing_club_id uuid;
   new_club_id uuid;
 begin
   if auth.uid() is null then
     raise exception 'Not authenticated';
+  end if;
+
+  club_name := nullif(trim(regexp_replace(p_name, '\s+', ' ', 'g')), '');
+  if club_name is null then
+    raise exception 'Club name is required';
   end if;
 
   perform pg_advisory_xact_lock(871234001, hashtext(auth.uid()::text));
@@ -203,29 +224,36 @@ begin
   limit 1;
 
   if existing_club_id is not null then
-    return existing_club_id;
+    raise exception 'Already in a club';
+  end if;
+
+  select name
+  into profile_name
+  from public.profiles
+  where user_id = auth.uid();
+
+  if profile_name is null then
+    raise exception 'Profile name is required';
   end if;
 
   insert into public.clubs (name)
-  values ('Fencing Club')
+  values (club_name)
   returning id into new_club_id;
 
   insert into public.club_members (club_id, user_id, role)
   values (new_club_id, auth.uid(), 'owner');
 
+  insert into public.fencers (club_id, name, user_id)
+  values (new_club_id, profile_name, auth.uid());
+
   return new_club_id;
 end;
 $$;
 
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row
-  execute procedure public.handle_new_user();
-
 create table public.fencers (
   id uuid primary key default gen_random_uuid(),
   club_id uuid not null references public.clubs (id) on delete cascade,
+  user_id uuid references auth.users (id) on delete set null,
   name text not null,
   archived_at timestamptz,
   created_at timestamptz not null default now(),
@@ -236,6 +264,14 @@ create table public.fencers (
 create unique index fencers_club_active_name_unique
   on public.fencers (club_id, lower(trim(name)))
   where archived_at is null;
+
+create unique index fencers_club_user_unique
+  on public.fencers (club_id, user_id)
+  where user_id is not null;
+
+create index fencers_user_id_idx
+  on public.fencers (user_id)
+  where user_id is not null;
 
 create trigger fencers_set_updated_at
   before update on public.fencers
@@ -290,6 +326,7 @@ create index matches_red_fencer_idx
 
 alter table public.clubs enable row level security;
 alter table public.club_members enable row level security;
+alter table public.profiles enable row level security;
 alter table public.fencers enable row level security;
 alter table public.matches enable row level security;
 
@@ -303,6 +340,22 @@ create policy "club_members_select_own"
   to authenticated
   using (user_id = auth.uid());
 
+create policy "profiles_select_own"
+  on public.profiles for select
+  to authenticated
+  using (user_id = auth.uid());
+
+create policy "profiles_insert_own"
+  on public.profiles for insert
+  to authenticated
+  with check (user_id = auth.uid());
+
+create policy "profiles_update_own"
+  on public.profiles for update
+  to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
 create policy "fencers_select_member"
   on public.fencers for select
   to authenticated
@@ -311,7 +364,7 @@ create policy "fencers_select_member"
 create policy "fencers_insert_member"
   on public.fencers for insert
   to authenticated
-  with check (public.is_club_member(club_id));
+  with check (public.is_club_member(club_id) and user_id is null);
 
 create policy "fencers_update_member"
   on public.fencers for update
@@ -344,18 +397,22 @@ create policy "matches_insert_member"
 -- Matches are append-only. No update/delete policies.
 
 revoke all on function public.is_club_member(uuid) from public;
-revoke all on function public.ensure_own_club() from public;
+revoke all on function public.save_own_profile(text) from public;
+revoke all on function public.create_own_club(text) from public;
 grant execute on function public.is_club_member(uuid) to authenticated;
-grant execute on function public.ensure_own_club() to authenticated;
+grant execute on function public.save_own_profile(text) to authenticated;
+grant execute on function public.create_own_club(text) to authenticated;
 
 grant usage on type public.club_member_role to authenticated;
 
 revoke all on public.clubs from anon;
 revoke all on public.club_members from anon;
+revoke all on public.profiles from anon;
 revoke all on public.fencers from anon;
 revoke all on public.matches from anon;
 grant select on public.clubs to authenticated;
 grant select on public.club_members to authenticated;
+grant select, insert, update on public.profiles to authenticated;
 grant select, insert, update on public.fencers to authenticated;
 grant select, insert on public.matches to authenticated;
 

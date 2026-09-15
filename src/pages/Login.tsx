@@ -37,7 +37,7 @@ export default function Login() {
     if (result.error) {
       setError(result.error);
     } else if (result.needsEmailConfirmation) {
-      setInfo("Check your email to confirm the club account, then sign in.");
+      setInfo("Check your email to confirm your account, then sign in.");
     }
     setBusy(null);
   };
@@ -48,7 +48,7 @@ export default function Login() {
         <CardHeader>
           <CardTitle className="font-display text-primary">Fencing Scorer</CardTitle>
           <CardDescription>
-            Sign in with the club account to load fencers and save bouts.
+            Sign in or create an account. A club is optional.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -88,7 +88,7 @@ export default function Login() {
               disabled={busy !== null}
               onClick={handleSignUp}
             >
-              {busy === "up" ? "Creating…" : "Create club account"}
+              {busy === "up" ? "Creating…" : "Create account"}
             </Button>
             <div className="relative py-2">
               <div className="absolute inset-0 flex items-center">
