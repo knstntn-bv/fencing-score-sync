@@ -51,17 +51,6 @@ create trigger clubs_mark_deleting
   for each row
   execute procedure public.clubs_mark_deleting();
 
-create table public.club_members (
-  club_id uuid not null references public.clubs (id) on delete cascade,
-  user_id uuid not null references auth.users (id) on delete cascade,
-  role public.club_member_role not null,
-  created_at timestamptz not null default now(),
-  primary key (club_id, user_id)
-);
-
-create index club_members_user_id_idx
-  on public.club_members (user_id);
-
 create or replace function public.is_club_member(p_club_id uuid)
 returns boolean
 language sql
@@ -94,82 +83,6 @@ as $$
       and archived_at is null
   );
 $$;
-
-create or replace function public.club_members_protect_last_owner()
-returns trigger
-language plpgsql
-as $$
-begin
-  if tg_op = 'DELETE' then
-    if current_setting('fencing.deleting_club_id', true) = old.club_id::text then
-      return old;
-    end if;
-
-    if old.role = 'owner'
-      and not exists (
-        select 1 from public.club_members
-        where club_id = old.club_id
-          and role = 'owner'
-          and user_id <> old.user_id
-      )
-      and exists (
-        select 1 from public.club_members
-        where club_id = old.club_id
-          and user_id <> old.user_id
-      )
-    then
-      raise exception 'club % must keep at least one owner', old.club_id;
-    end if;
-
-    return old;
-  end if;
-
-  if old.role = 'owner'
-    and new.role is distinct from 'owner'
-    and not exists (
-      select 1 from public.club_members
-      where club_id = old.club_id
-        and role = 'owner'
-        and user_id <> old.user_id
-    )
-  then
-    raise exception 'club % must keep at least one owner', old.club_id;
-  end if;
-
-  return new;
-end;
-$$;
-
-create trigger club_members_protect_last_owner
-  before delete or update of role on public.club_members
-  for each row
-  execute procedure public.club_members_protect_last_owner();
-
-create or replace function public.club_members_cleanup_empty_club()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if current_setting('fencing.deleting_club_id', true) = old.club_id::text then
-    return old;
-  end if;
-
-  if not exists (
-    select 1 from public.club_members where club_id = old.club_id
-  ) then
-    delete from public.clubs where id = old.club_id;
-  end if;
-
-  return old;
-end;
-$$;
-
-create trigger club_members_cleanup_empty_club
-  after delete on public.club_members
-  for each row
-  execute procedure public.club_members_cleanup_empty_club();
 
 create table public.profiles (
   user_id uuid primary key references auth.users (id) on delete cascade,
@@ -293,9 +206,6 @@ begin
   insert into public.clubs (name)
   values (club_name)
   returning id into new_club_id;
-
-  insert into public.club_members (club_id, user_id, role)
-  values (new_club_id, auth.uid(), 'owner');
 
   insert into public.fencers (club_id, name, user_id, role)
   values (new_club_id, profile_name, auth.uid(), 'owner');
@@ -533,10 +443,6 @@ begin
       name = profile_name
   where id = p_fencer_id;
 
-  insert into public.club_members (club_id, user_id, role)
-  values (target.club_id, profile_user, 'member')
-  on conflict (club_id, user_id) do nothing;
-
   return p_fencer_id;
 end;
 $$;
@@ -581,10 +487,6 @@ begin
       role = null,
       archived_at = coalesce(archived_at, now())
   where id = p_fencer_id;
-
-  delete from public.club_members
-  where club_id = target.club_id
-    and user_id = target.user_id;
 
   return p_fencer_id;
 end;
@@ -649,10 +551,6 @@ begin
   values (my_club, profile_name, profile_user, 'member')
   returning id into new_id;
 
-  insert into public.club_members (club_id, user_id, role)
-  values (my_club, profile_user, 'member')
-  on conflict (club_id, user_id) do nothing;
-
   return new_id;
 end;
 $$;
@@ -704,7 +602,6 @@ create index matches_red_fencer_idx
   on public.matches (red_fencer_id);
 
 alter table public.clubs enable row level security;
-alter table public.club_members enable row level security;
 alter table public.profiles enable row level security;
 alter table public.fencers enable row level security;
 alter table public.matches enable row level security;
@@ -719,11 +616,6 @@ create policy "clubs_update_owner"
   to authenticated
   using (public.is_club_owner(id))
   with check (public.is_club_owner(id));
-
-create policy "club_members_select_own"
-  on public.club_members for select
-  to authenticated
-  using (user_id = auth.uid());
 
 create policy "profiles_select_own"
   on public.profiles for select
@@ -804,12 +696,10 @@ grant execute on function public.add_linked_fencer(text) to authenticated;
 grant usage on type public.club_member_role to authenticated;
 
 revoke all on public.clubs from anon;
-revoke all on public.club_members from anon;
 revoke all on public.profiles from anon;
 revoke all on public.fencers from anon;
 revoke all on public.matches from anon;
 grant select, update on public.clubs to authenticated;
-grant select on public.club_members to authenticated;
 grant select, insert, update on public.profiles to authenticated;
 grant select, insert, update on public.fencers to authenticated;
 grant select, insert on public.matches to authenticated;

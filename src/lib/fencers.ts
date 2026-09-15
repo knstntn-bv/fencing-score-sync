@@ -26,7 +26,7 @@ export function normalizeFencerName(name: string): string {
 export function uniqueNameErrorMessage(error: { code?: string; message?: string; details?: string }): string | null {
   if (error.code !== "23505") return null;
   const hay = `${error.message ?? ""} ${error.details ?? ""}`;
-  if (hay.includes("fencers_user_unique") || hay.includes("club_members")) {
+  if (hay.includes("fencers_user_unique")) {
     return "That account already belongs to a club.";
   }
   return "A fencer with this name already exists.";

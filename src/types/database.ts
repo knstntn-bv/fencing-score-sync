@@ -46,27 +46,6 @@ export type Database = {
         };
         Relationships: [];
       };
-      club_members: {
-        Row: {
-          club_id: string;
-          user_id: string;
-          role: Database["public"]["Enums"]["club_member_role"];
-          created_at: string;
-        };
-        Insert: {
-          club_id: string;
-          user_id: string;
-          role: Database["public"]["Enums"]["club_member_role"];
-          created_at?: string;
-        };
-        Update: {
-          club_id?: string;
-          user_id?: string;
-          role?: Database["public"]["Enums"]["club_member_role"];
-          created_at?: string;
-        };
-        Relationships: [];
-      };
       fencers: {
         Row: {
           id: string;
