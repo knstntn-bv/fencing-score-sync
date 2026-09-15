@@ -5,6 +5,7 @@ export type Fencer = {
   id: string;
   clubId: string;
   userId: string | null;
+  role: "owner" | "trainer" | "member" | null;
   name: string;
   archivedAt: string | null;
   createdAt: string;

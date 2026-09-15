@@ -57,14 +57,15 @@ profiles
 fencers
   id            uuid pk
   club_id       uuid not null          -- → clubs.id
-  user_id       uuid null              -- → auth.users.id, владелец клуба
+  user_id       uuid null              -- → auth.users.id
+  role          owner | trainer | member | null  -- непусто, если есть user_id
   name          text not null
   archived_at   timestamptz null       -- soft-delete: история не дырявится
   created_at    timestamptz
   updated_at    timestamptz
 ```
 
-Уникальность имени в клубе: `(club_id, lower(trim(name)))` среди неархивных. Пустые имена запрещены.
+Уникальность имени в клубе: `(club_id, lower(trim(name)))` среди неархивных. Пустые имена запрещены. `role` и `user_id` либо оба пустые, либо оба заданы. Пока доступ в клуб ещё проверяется через `club_members`; роль на бойце заполняется с членства и пишется при `create_own_club`.
 
 Удаление из UI = архив. На `matches` нет каскадного удаления бойцов. Политики DELETE нет.
 

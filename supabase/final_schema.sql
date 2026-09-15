@@ -294,8 +294,8 @@ begin
   insert into public.club_members (club_id, user_id, role)
   values (new_club_id, auth.uid(), 'owner');
 
-  insert into public.fencers (club_id, name, user_id)
-  values (new_club_id, profile_name, auth.uid());
+  insert into public.fencers (club_id, name, user_id, role)
+  values (new_club_id, profile_name, auth.uid(), 'owner');
 
   return new_club_id;
 end;
@@ -346,11 +346,13 @@ create table public.fencers (
   id uuid primary key default gen_random_uuid(),
   club_id uuid not null references public.clubs (id) on delete cascade,
   user_id uuid references auth.users (id) on delete set null,
+  role public.club_member_role,
   name text not null,
   archived_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint fencers_name_not_blank check (char_length(trim(name)) > 0)
+  constraint fencers_name_not_blank check (char_length(trim(name)) > 0),
+  constraint fencers_role_matches_user check ((user_id is null) = (role is null))
 );
 
 create unique index fencers_club_active_name_unique
