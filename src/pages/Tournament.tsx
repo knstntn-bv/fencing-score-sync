@@ -298,6 +298,7 @@ export default function TournamentPage() {
           kothTable={tournament.kothTable}
           tournamentId={event.id}
           groupTables={tournament.groupTables}
+          groupCount={event.groupCount}
           cutoffTies={tournament.cutoffTies}
           resolvingId={
             tournament.resolveCutoff.isPending
@@ -720,6 +721,21 @@ function SetupPanel({
           ? " Choose a points scheme to start."
           : null}
       </p>
+
+      {event.format !== "king_of_hill" && tournament.bouts.length > 0 ? (
+        <div className="space-y-6">
+          <h2 className="text-lg font-medium">Queue</h2>
+          <QueueList
+            key={tournament.bouts.map((bout) => bout.id).join("|")}
+            format={event.format}
+            bouts={tournament.bouts}
+            queue={tournament.queue}
+            groupCount={event.groupCount}
+            fencerName={(id) => nameFromParticipants(tournament.participants, id)}
+            showStart={false}
+          />
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -735,6 +751,7 @@ function ConductingPanel({
   kothTable,
   tournamentId,
   groupTables,
+  groupCount,
   cutoffTies,
   resolvingId,
   fencerName,
@@ -755,6 +772,7 @@ function ConductingPanel({
   kothTable: KothStandingRow[];
   tournamentId: string;
   groupTables: { groupNo: number; standings: StandingRow[] }[];
+  groupCount: number | null;
   cutoffTies: CutoffTie[];
   resolvingId?: string;
   fencerName: (id: string | null) => string;
@@ -767,14 +785,8 @@ function ConductingPanel({
 }) {
   const live = status === "live";
   const defaultTab = live ? "queue" : "table";
-  const groupQueue = groupTables.map((table) => ({
-    groupNo: table.groupNo,
-    bouts: queue.filter((bout) => bout.stage === "group" && bout.groupNo === table.groupNo),
-  }));
-  const hasGroupQueue = groupQueue.some((group) => group.bouts.length > 0);
-  const swissQueue = swissBoutsByRound(queue);
-  const pendingGroupNos = cutoffTies.map((tie) => tie.groupNo);
   const cutoffByGroup = new Map(cutoffTies.map((tie) => [tie.groupNo, tie]));
+  const pendingGroupNos = cutoffTies.map((tie) => tie.groupNo);
 
   return (
     <section className="space-y-4">
@@ -787,69 +799,18 @@ function ConductingPanel({
 
         {live ? (
           <TabsContent value="queue" className="space-y-6">
-            {format === "playoff" ? (
-              <PlayoffBracket bouts={bouts} fencerName={fencerName} showStart />
-            ) : format === "groups_playoff" ? (
-              <>
-                {hasGroupQueue
-                  ? groupQueue.map((group) =>
-                      group.bouts.length === 0 ? null : (
-                        <div key={group.groupNo} className="space-y-3">
-                          <h3 className="text-sm font-medium text-muted-foreground">
-                            {groupTitle(group.groupNo)}
-                          </h3>
-                          <ul className="space-y-3">
-                            {group.bouts.map((bout) => (
-                              <li key={bout.id}>
-                                <GroupQueueCard bout={bout} fencerName={fencerName} />
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )
-                    )
-                  : null}
-                <PlayoffBracket
-                  bouts={bouts}
-                  fencerName={fencerName}
-                  showStart
-                  pendingGroupNos={pendingGroupNos}
-                />
-                {!hasGroupQueue && queue.filter((bout) => bout.stage === "playoff").length === 0 ? (
-                  <p className="text-muted-foreground">No bouts left in the queue.</p>
-                ) : null}
-              </>
-            ) : format === "king_of_hill" ? (
+            {format === "king_of_hill" ? (
               <KothQueue exits={kothExits} tournamentId={tournamentId} />
-            ) : format === "swiss" ? (
-              swissQueue.length === 0 ? (
-                <p className="text-muted-foreground">No bouts left in the queue.</p>
-              ) : (
-                swissQueue.map((round) => (
-                  <div key={round.round} className="space-y-3">
-                    <h3 className="text-sm font-medium text-muted-foreground">
-                      {swissRoundLabel(round.round)}
-                    </h3>
-                    <ul className="space-y-3">
-                      {round.bouts.map((bout) => (
-                        <li key={bout.id}>
-                          <GroupQueueCard bout={bout} fencerName={fencerName} />
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))
-              )
-            ) : queue.length === 0 ? (
-              <p className="text-muted-foreground">No bouts left in the queue.</p>
             ) : (
-              <ul className="space-y-3">
-                {queue.map((bout) => (
-                  <li key={bout.id}>
-                    <GroupQueueCard bout={bout} fencerName={fencerName} />
-                  </li>
-                ))}
-              </ul>
+              <QueueList
+                format={format}
+                bouts={bouts}
+                queue={queue}
+                groupCount={groupCount}
+                pendingGroupNos={pendingGroupNos}
+                fencerName={fencerName}
+                showStart
+              />
             )}
           </TabsContent>
         ) : null}
@@ -1034,12 +995,117 @@ function KothStandingsList({
   );
 }
 
+function QueueList({
+  format,
+  bouts,
+  queue,
+  groupCount,
+  pendingGroupNos = [],
+  fencerName,
+  showStart,
+}: {
+  format: TournamentFormat | null;
+  bouts: TournamentBout[];
+  queue: TournamentBout[];
+  groupCount: number | null;
+  pendingGroupNos?: number[];
+  fencerName: (id: string | null) => string;
+  showStart: boolean;
+}) {
+  if (format === "playoff") {
+    return <PlayoffBracket bouts={bouts} fencerName={fencerName} showStart={showStart} />;
+  }
+
+  if (format === "groups_playoff") {
+    const groupQueue = Array.from({ length: groupCount ?? 0 }, (_, index) => {
+      const groupNo = index + 1;
+      return {
+        groupNo,
+        bouts: queue.filter((bout) => bout.stage === "group" && bout.groupNo === groupNo),
+      };
+    });
+    const hasGroupQueue = groupQueue.some((group) => group.bouts.length > 0);
+    return (
+      <div className="space-y-6">
+        {hasGroupQueue
+          ? groupQueue.map((group) =>
+              group.bouts.length === 0 ? null : (
+                <div key={group.groupNo} className="space-y-3">
+                  <h3 className="text-sm font-medium text-muted-foreground">
+                    {groupTitle(group.groupNo)}
+                  </h3>
+                  <ul className="space-y-3">
+                    {group.bouts.map((bout) => (
+                      <li key={bout.id}>
+                        <GroupQueueCard bout={bout} fencerName={fencerName} showStart={showStart} />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )
+            )
+          : null}
+        <PlayoffBracket
+          bouts={bouts}
+          fencerName={fencerName}
+          showStart={showStart}
+          pendingGroupNos={pendingGroupNos}
+        />
+        {!hasGroupQueue && queue.filter((bout) => bout.stage === "playoff").length === 0 ? (
+          <p className="text-muted-foreground">No bouts left in the queue.</p>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (format === "swiss") {
+    const swissQueue = swissBoutsByRound(queue);
+    if (swissQueue.length === 0) {
+      return <p className="text-muted-foreground">No bouts left in the queue.</p>;
+    }
+    return (
+      <div className="space-y-6">
+        {swissQueue.map((round) => (
+          <div key={round.round} className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground">
+              {swissRoundLabel(round.round)}
+            </h3>
+            <ul className="space-y-3">
+              {round.bouts.map((bout) => (
+                <li key={bout.id}>
+                  <GroupQueueCard bout={bout} fencerName={fencerName} showStart={showStart} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (queue.length === 0) {
+    return <p className="text-muted-foreground">No bouts left in the queue.</p>;
+  }
+
+  return (
+    <ul className="space-y-3">
+      {queue.map((bout) => (
+        <li key={bout.id}>
+          <GroupQueueCard bout={bout} fencerName={fencerName} showStart={showStart} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function GroupQueueCard({
   bout,
   fencerName,
+  showStart,
 }: {
   bout: TournamentBout;
   fencerName: (id: string | null) => string;
+  showStart: boolean;
 }) {
   return (
     <Card>
@@ -1049,9 +1115,11 @@ function GroupQueueCard({
           <span className="text-muted-foreground"> vs </span>
           <span className="text-fencer-red font-medium">{fencerName(bout.redFencerId)}</span>
         </p>
-        <Button asChild size="sm">
-          <Link to={`/?t=${bout.tournamentId}&b=${bout.id}`}>Start</Link>
-        </Button>
+        {showStart ? (
+          <Button asChild size="sm">
+            <Link to={`/?t=${bout.tournamentId}&b=${bout.id}`}>Start</Link>
+          </Button>
+        ) : null}
       </CardContent>
     </Card>
   );
