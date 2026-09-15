@@ -44,7 +44,7 @@
 
 **Supabase** (после входа)
 
-- `clubs`, `club_members`, `profiles`, `fencers`, `matches`;
+- `clubs`, `profiles`, `fencers`, `matches`;
 - `tournaments`, `tournament_participants`, `tournament_bouts` — отдельно от клубных боёв, без турнирного outbox;
 - `club_id` — это `clubs.id`; доступ — активный `fencers.user_id`;
 - в клиент только anon key.
