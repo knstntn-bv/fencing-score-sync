@@ -9,7 +9,14 @@ import {
   type ReactNode,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { createOwnClub, loadOwnAccountWithRetry, renameOwnClub, saveOwnProfile, type ClubMemberRole } from "@/lib/clubs";
+import {
+  createOwnClub,
+  getOwnProfile,
+  loadOwnAccountWithRetry,
+  renameOwnClub,
+  saveOwnProfile,
+  type ClubMemberRole,
+} from "@/lib/clubs";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 const GUEST_BOUT_KEY = "fencing-scorer:v1:guest-bout";
@@ -37,6 +44,7 @@ type AuthContextValue = {
   session: Session | null;
   user: User | null;
   profileName: string | null;
+  profilePublicId: string | null;
   clubId: string | null;
   clubName: string | null;
   clubRole: ClubMemberRole | null;
@@ -60,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sessionLoading, setSessionLoading] = useState(isSupabaseConfigured);
   const [session, setSession] = useState<Session | null>(null);
   const [profileName, setProfileName] = useState<string | null>(null);
+  const [profilePublicId, setProfilePublicId] = useState<string | null>(null);
   const [clubId, setClubId] = useState<string | null>(null);
   const [clubName, setClubName] = useState<string | null>(null);
   const [clubRole, setClubRole] = useState<ClubMemberRole | null>(null);
@@ -89,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (userIdRef.current === nextUserId) return;
     userIdRef.current = nextUserId;
     setProfileName(null);
+    setProfilePublicId(null);
     setClubId(null);
     setClubName(null);
     setClubRole(null);
@@ -132,6 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userId = session?.user?.id;
     if (!userId) {
       setProfileName(null);
+      setProfilePublicId(null);
       setClubId(null);
       setClubName(null);
       setClubRole(null);
@@ -148,6 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((account) => {
         if (cancelled) return;
         setProfileName(account.profile?.name ?? null);
+        setProfilePublicId(account.profile?.publicId ?? null);
         setClubId(account.clubId);
         setClubName(account.clubName);
         setClubRole(account.clubRole);
@@ -156,6 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(() => {
         if (cancelled) return;
         setProfileName(null);
+        setProfilePublicId(null);
         setClubId(null);
         setClubName(null);
         setClubRole(null);
@@ -206,6 +219,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const saved = await saveOwnProfile(name);
       setProfileName(saved);
+      const profile = await getOwnProfile();
+      setProfilePublicId(profile?.publicId ?? null);
       return { error: null };
     } catch (error) {
       return { error: error instanceof Error ? error.message : "Could not save your name." };
@@ -239,6 +254,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const saved = await saveOwnProfile(name);
       const nextClubId = nextClubName ? await createOwnClub(nextClubName) : null;
       setProfileName(saved);
+      const profile = await getOwnProfile();
+      setProfilePublicId(profile?.publicId ?? null);
       if (nextClubId && nextClubName) {
         setClubId(nextClubId);
         setClubRole("owner");
@@ -259,6 +276,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       user: session?.user ?? null,
       profileName,
+      profilePublicId,
       clubId,
       clubName,
       clubRole,
@@ -279,6 +297,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       session,
       profileName,
+      profilePublicId,
       clubId,
       clubName,
       clubRole,
