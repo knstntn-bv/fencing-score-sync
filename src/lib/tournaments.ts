@@ -33,8 +33,13 @@ export function newTournamentName(now = new Date()): string {
 }
 
 export function tournamentErrorMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === "object" && "message" in error && typeof error.message === "string" && error.message) {
-    return error.message;
+  if (error && typeof error === "object") {
+    const code = "code" in error && typeof error.code === "string" ? error.code : "";
+    const message = "message" in error && typeof error.message === "string" ? error.message : "";
+    if (code === "23505") return "Already checked in.";
+    if (message.includes("ID is required")) return "Enter a valid ID.";
+    if (message.includes("Not a club member")) return "You are not in this club.";
+    if (message) return message;
   }
   if (error instanceof Error && error.message) return error.message;
   return fallback;
@@ -167,7 +172,10 @@ export async function addParticipant(input: {
     .select("*")
     .single();
 
-  if (error) throw error;
+  if (error) {
+    if (error.code === "23505") throw new Error("Already checked in.");
+    throw error;
+  }
   return mapParticipant(data);
 }
 
@@ -241,4 +249,40 @@ export async function setParticipantGroups(
       .eq("fencer_id", row.fencerId);
     if (error) throw error;
   }
+}
+
+export type CheckInLookup = {
+  userId: string;
+  name: string;
+  clubName: string | null;
+  fencerId: string | null;
+};
+
+export function normalizePublicId(value: string): string | null {
+  const normalized = value.trim();
+  if (!normalized || !/^[0-9]+$/.test(normalized)) return null;
+  return normalized;
+}
+
+export async function lookupCheckinByPublicId(
+  publicId: string,
+  clubId: string
+): Promise<CheckInLookup | null> {
+  const normalized = normalizePublicId(publicId);
+  if (!normalized) throw new Error("Enter a valid ID.");
+
+  const { data, error } = await requireSupabase().rpc("lookup_checkin_by_public_id", {
+    p_public_id: normalized,
+    p_club_id: clubId,
+  });
+  if (error) throw error;
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
+  return {
+    userId: row.user_id,
+    name: row.name,
+    clubName: row.club_name,
+    fencerId: row.fencer_id,
+  };
 }

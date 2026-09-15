@@ -351,6 +351,15 @@ export type Database = {
         Args: { p_club_id: string };
         Returns: boolean;
       };
+      lookup_checkin_by_public_id: {
+        Args: { p_public_id: string; p_club_id: string };
+        Returns: {
+          user_id: string;
+          name: string;
+          club_name: string | null;
+          fencer_id: string | null;
+        }[];
+      };
     };
     Enums: {
       club_member_role: "owner" | "trainer" | "member";

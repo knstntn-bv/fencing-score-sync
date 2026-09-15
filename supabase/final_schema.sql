@@ -583,6 +583,59 @@ create table public.tournament_participants (
 create index tournament_participants_club_id_idx
   on public.tournament_participants (club_id);
 
+create or replace function public.lookup_checkin_by_public_id(p_public_id text, p_club_id uuid)
+returns table (
+  user_id uuid,
+  name text,
+  club_name text,
+  fencer_id uuid
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  normalized text;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  if p_club_id is null or not public.is_club_member(p_club_id) then
+    raise exception 'Not a club member';
+  end if;
+
+  normalized := nullif(trim(p_public_id), '');
+  if normalized is null or normalized !~ '^[0-9]+$' then
+    raise exception 'ID is required';
+  end if;
+
+  return query
+  select
+    profile.user_id,
+    profile.name,
+    (
+      select club.name
+      from public.club_members as membership
+      join public.clubs as club on club.id = membership.club_id
+      where membership.user_id = profile.user_id
+      order by (membership.role = 'owner') desc, membership.created_at asc
+      limit 1
+    ) as club_name,
+    (
+      select fencer.id
+      from public.fencers as fencer
+      where fencer.user_id = profile.user_id
+        and fencer.club_id = p_club_id
+        and fencer.archived_at is null
+      limit 1
+    ) as fencer_id
+  from public.profiles as profile
+  where profile.public_id = normalized;
+end;
+$$;
+
 create table public.tournament_bouts (
   id uuid primary key default gen_random_uuid(),
   tournament_id uuid not null references public.tournaments (id) on delete cascade,
@@ -826,6 +879,9 @@ revoke all on public.tournament_bouts from anon;
 grant select, insert, update, delete on public.tournaments to authenticated;
 grant select, insert, update, delete on public.tournament_participants to authenticated;
 grant select, insert, update, delete on public.tournament_bouts to authenticated;
+
+revoke all on function public.lookup_checkin_by_public_id(text, uuid) from public;
+grant execute on function public.lookup_checkin_by_public_id(text, uuid) to authenticated;
 
 grant usage on type public.tournament_status to authenticated;
 grant usage on type public.tournament_format to authenticated;

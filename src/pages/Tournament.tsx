@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { format } from "date-fns";
-import { ArrowLeft, Trophy, UserPlus } from "lucide-react";
+import { ArrowLeft, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { OverrideBoutDialog } from "@/components/OverrideBoutDialog";
 import { BoutScoreline } from "@/components/BoutScoreline";
 import { PlayoffBracket } from "@/components/PlayoffBracket";
+import { TournamentCheckIn } from "@/components/TournamentCheckIn";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,7 +23,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/context/AuthContext";
 import { useTournament } from "@/hooks/useTournament";
@@ -152,11 +152,11 @@ export default function TournamentPage() {
   const checkedCount = tournament.checkedInIds.size;
   const fencerName = (fencerId: string | null) =>
     nameFromParticipants(tournament.participants, fencerId);
-  const extraCheckedIn = tournament.participants.filter((row) => row.isGuest);
   const checkInBusy =
     tournament.checkIn.isPending ||
     tournament.checkOut.isPending ||
-    tournament.checkInGuest.isPending;
+    tournament.checkInGuest.isPending ||
+    tournament.checkInById.isPending;
 
   return (
     <TournamentShell
@@ -182,99 +182,17 @@ export default function TournamentPage() {
       ) : null}
 
       {event.status === "setup" ? (
-        <section className="space-y-4 mb-10">
-          <div>
-            <h2 className="text-lg font-medium">Check-in</h2>
-            <p className="text-sm text-muted-foreground">
-              Mark who is fencing today. Guests are named here and stay off the club roster.
-            </p>
-          </div>
-
-          {tournament.roster.isLoading ? (
-            <p className="text-muted-foreground">Loading roster…</p>
-          ) : (
-            <div className="space-y-6">
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium text-muted-foreground">From roster</h3>
-                {tournament.roster.active.length === 0 ? (
-                  <p className="text-muted-foreground">
-                    No fencers in the roster.{" "}
-                    <Link to="/fencers" className="text-primary underline underline-offset-4">
-                      Add names on Fencers
-                    </Link>
-                    , or add a guest below.
-                  </p>
-                ) : (
-                  <ul className="space-y-3">
-                    {tournament.roster.active.map((fencer) => (
-                      <li key={fencer.id}>
-                        <CheckInRow
-                          id={fencer.id}
-                          name={fencer.name}
-                          checked={tournament.checkedInIds.has(fencer.id)}
-                          disabled={checkInBusy}
-                          onToggle={async (checked) => {
-                            try {
-                              if (checked) await tournament.checkIn.mutateAsync(fencer.id);
-                              else await tournament.checkOut.mutateAsync(fencer.id);
-                            } catch (error) {
-                              toast.error(tournament.mutationError(error));
-                            }
-                          }}
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              {extraCheckedIn.length > 0 ? (
-                <div className="space-y-3">
-                  <h3 className="text-sm font-medium text-muted-foreground">Guests</h3>
-                  <ul className="space-y-3">
-                    {extraCheckedIn.map((row) => (
-                      <li key={row.fencerId}>
-                        <CheckInRow
-                          id={row.fencerId}
-                          name={row.name}
-                          checked
-                          disabled={checkInBusy}
-                          onToggle={async (checked) => {
-                            if (checked) return;
-                            try {
-                              await tournament.checkOut.mutateAsync(row.fencerId);
-                            } catch (error) {
-                              toast.error(tournament.mutationError(error));
-                            }
-                          }}
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              <GuestCheckInForm
-                saving={tournament.checkInGuest.isPending}
-                onAdd={async (input) => {
-                  try {
-                    await tournament.checkInGuest.mutateAsync(input);
-                    toast.success("Guest checked in");
-                  } catch (error) {
-                    toast.error(tournament.mutationError(error));
-                    throw error;
-                  }
-                }}
-              />
-            </div>
-          )}
-
-          <p className="text-sm text-muted-foreground">
-            {checkedCount < 2
-              ? "Check in at least two fencers to continue."
-              : `${checkedCount} checked in.`}
-          </p>
-        </section>
+        <TournamentCheckIn
+          participants={tournament.participants}
+          roster={tournament.roster.active}
+          rosterLoading={tournament.roster.isLoading}
+          busy={checkInBusy}
+          onCheckIn={(fencerId) => tournament.checkIn.mutateAsync(fencerId)}
+          onCheckInGuest={(input) => tournament.checkInGuest.mutateAsync(input)}
+          onCheckInById={(publicId) => tournament.checkInById.mutateAsync(publicId)}
+          onCheckOut={(fencerId) => tournament.checkOut.mutateAsync(fencerId)}
+          errorMessage={tournament.mutationError}
+        />
       ) : null}
 
       {event.status === "setup" && checkedCount >= 2 ? (
@@ -1334,96 +1252,6 @@ function NameField({
       </div>
       <p className="text-muted-foreground">{statusLabel}</p>
     </div>
-  );
-}
-
-function CheckInRow({
-  id,
-  name,
-  checked,
-  disabled,
-  onToggle,
-}: {
-  id: string;
-  name: string;
-  checked: boolean;
-  disabled: boolean;
-  onToggle: (checked: boolean) => Promise<void>;
-}) {
-  return (
-    <Card>
-      <CardContent className="p-4 flex items-center justify-between gap-3">
-        <label htmlFor={`check-in-${id}`} className="font-medium text-lg min-w-0 truncate">
-          {name}
-        </label>
-        <Switch
-          id={`check-in-${id}`}
-          checked={checked}
-          disabled={disabled}
-          onCheckedChange={(next) => void onToggle(next)}
-          aria-label={`Check in ${name}`}
-        />
-      </CardContent>
-    </Card>
-  );
-}
-
-function GuestCheckInForm({
-  saving,
-  onAdd,
-}: {
-  saving: boolean;
-  onAdd: (input: { name: string; clubName?: string }) => Promise<void>;
-}) {
-  const [name, setName] = useState("");
-  const [clubName, setClubName] = useState("");
-
-  const submit = async () => {
-    const nextName = name.trim();
-    if (!nextName || saving) return;
-    await onAdd({ name: nextName, clubName });
-    setName("");
-    setClubName("");
-  };
-
-  return (
-    <form
-      className="space-y-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void submit().catch(() => {
-          /* toast is handled by the caller */
-        });
-      }}
-    >
-      <h3 className="text-sm font-medium text-muted-foreground">Add guest</h3>
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="flex-1 space-y-2">
-          <Label htmlFor="guest-name">Name</Label>
-          <Input
-            id="guest-name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="Guest name"
-            autoComplete="off"
-          />
-        </div>
-        <div className="flex-1 space-y-2">
-          <Label htmlFor="guest-club">Club (optional)</Label>
-          <Input
-            id="guest-club"
-            value={clubName}
-            onChange={(event) => setClubName(event.target.value)}
-            placeholder="Club"
-            autoComplete="off"
-          />
-        </div>
-        <Button type="submit" className="sm:self-end" disabled={saving || !name.trim()}>
-          <UserPlus className="h-4 w-4 mr-2" />
-          Add guest
-        </Button>
-      </div>
-    </form>
   );
 }
 
