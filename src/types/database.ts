@@ -363,6 +363,14 @@ export type Database = {
           fencer_id: string | null;
         }[];
       };
+      link_fencer_to_profile: {
+        Args: { p_fencer_id: string; p_public_id: string };
+        Returns: string;
+      };
+      unlink_and_archive: {
+        Args: { p_fencer_id: string };
+        Returns: string;
+      };
     };
     Enums: {
       club_member_role: "owner" | "trainer" | "member";

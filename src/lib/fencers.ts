@@ -23,23 +23,67 @@ export function normalizeFencerName(name: string): string {
   return name.trim().replace(/\s+/g, " ");
 }
 
-export function uniqueNameErrorMessage(error: { code?: string; message?: string }): string | null {
-  if (error.code === "23505") {
-    return "A fencer with this name already exists.";
+export function uniqueNameErrorMessage(error: { code?: string; message?: string; details?: string }): string | null {
+  if (error.code !== "23505") return null;
+  const hay = `${error.message ?? ""} ${error.details ?? ""}`;
+  if (hay.includes("fencers_user_unique") || hay.includes("club_members")) {
+    return "That account already belongs to a club.";
+  }
+  return "A fencer with this name already exists.";
+}
+
+function rpcErrorMessage(message: string): string | null {
+  if (message.includes("linked fencer name can only be changed from the profile")) {
+    return "This name is set in Account.";
+  }
+  if (message.includes("linked fencer must be unlinked to archive")) {
+    return "Unlink this account to archive it.";
+  }
+  if (message.includes("must keep at least one owner")) {
+    return "The club must keep at least one owner.";
+  }
+  if (message.includes("Already in a club")) {
+    return "That account already belongs to a club.";
+  }
+  if (message.includes("Fencer is already linked")) {
+    return "This fencer is already linked to an account.";
+  }
+  if (message.includes("Fencer is not linked")) {
+    return "This fencer is not linked to an account.";
+  }
+  if (message.includes("Fencer is archived")) {
+    return "Restore this fencer before linking an account.";
+  }
+  if (message.includes("Profile not found")) {
+    return "No account has that ID.";
+  }
+  if (message.includes("Fencer not found")) {
+    return "Fencer not found.";
+  }
+  if (message.includes("ID is required")) {
+    return "Enter a valid ID.";
   }
   return null;
 }
 
 export function fencerErrorMessage(error: unknown, fallback: string): string {
   if (error && typeof error === "object") {
-    const unique = uniqueNameErrorMessage(error as { code?: string; message?: string });
+    const unique = uniqueNameErrorMessage(
+      error as { code?: string; message?: string; details?: string }
+    );
     if (unique) return unique;
     if ("message" in error && typeof error.message === "string" && error.message) {
-      return error.message;
+      return rpcErrorMessage(error.message) ?? error.message;
     }
   }
-  if (error instanceof Error && error.message) return error.message;
+  if (error instanceof Error && error.message) {
+    return rpcErrorMessage(error.message) ?? error.message;
+  }
   return fallback;
+}
+
+export function isLinkedFencer(fencer: Pick<Fencer, "userId">): boolean {
+  return Boolean(fencer.userId);
 }
 
 export function readFencerCache(clubId: string): Fencer[] | undefined {
@@ -106,16 +150,39 @@ export async function renameFencer(id: string, name: string): Promise<Fencer> {
   return mapFencer(data);
 }
 
-export async function archiveFencer(id: string): Promise<Fencer> {
-  const { data, error } = await requireSupabase()
+export async function linkFencerToProfile(fencerId: string, publicId: string): Promise<string> {
+  const { data, error } = await requireSupabase().rpc("link_fencer_to_profile", {
+    p_fencer_id: fencerId,
+    p_public_id: publicId,
+  });
+  if (error) throw error;
+  if (!data) throw new Error("Could not link this account.");
+  return data;
+}
+
+export async function unlinkAndArchive(id: string): Promise<string> {
+  const { data, error } = await requireSupabase().rpc("unlink_and_archive", {
+    p_fencer_id: id,
+  });
+  if (error) throw error;
+  if (!data) throw new Error("Could not unlink this account.");
+  return data;
+}
+
+export async function archiveFencer(fencer: Pick<Fencer, "id" | "userId">): Promise<void> {
+  if (fencer.userId) {
+    await unlinkAndArchive(fencer.id);
+    return;
+  }
+
+  const { error } = await requireSupabase()
     .from("fencers")
     .update({ archived_at: new Date().toISOString() })
-    .eq("id", id)
+    .eq("id", fencer.id)
     .select("*")
     .single();
 
   if (error) throw error;
-  return mapFencer(data);
 }
 
 export async function restoreFencer(id: string): Promise<Fencer> {

@@ -237,6 +237,8 @@ begin
   on conflict (user_id) do update
     set name = excluded.name;
 
+  perform set_config('fencing.fencer_link', '1', true);
+
   update public.fencers
   set name = normalized
   where user_id = auth.uid()
@@ -377,8 +379,19 @@ begin
   if current_setting('fencing.fencer_link', true) = '1' then
     return new;
   end if;
+
   new.user_id := old.user_id;
   new.role := old.role;
+
+  if old.user_id is not null then
+    if new.name is distinct from old.name then
+      raise exception 'linked fencer name can only be changed from the profile';
+    end if;
+    if new.archived_at is distinct from old.archived_at then
+      raise exception 'linked fencer must be unlinked to archive';
+    end if;
+  end if;
+
   return new;
 end;
 $$;
@@ -446,6 +459,136 @@ create trigger fencers_protect_last_owner
   before delete or update of role, user_id, archived_at on public.fencers
   for each row
   execute procedure public.fencers_protect_last_owner();
+
+create or replace function public.link_fencer_to_profile(p_fencer_id uuid, p_public_id text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  normalized text;
+  profile_user uuid;
+  profile_name text;
+  target public.fencers%rowtype;
+  existing_fencer_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  if p_fencer_id is null then
+    raise exception 'Fencer not found';
+  end if;
+
+  normalized := nullif(trim(p_public_id), '');
+  if normalized is null or normalized !~ '^[0-9]+$' then
+    raise exception 'ID is required';
+  end if;
+
+  select *
+  into target
+  from public.fencers
+  where id = p_fencer_id;
+
+  if target.id is null or not public.is_club_member(target.club_id) then
+    raise exception 'Fencer not found';
+  end if;
+
+  if target.archived_at is not null then
+    raise exception 'Fencer is archived';
+  end if;
+
+  if target.user_id is not null then
+    raise exception 'Fencer is already linked';
+  end if;
+
+  select user_id, name
+  into profile_user, profile_name
+  from public.profiles
+  where public_id = normalized;
+
+  if profile_user is null then
+    raise exception 'Profile not found';
+  end if;
+
+  perform pg_advisory_xact_lock(871234001, hashtext(profile_user::text));
+  perform pg_advisory_xact_lock(871234003, hashtext(p_fencer_id::text));
+
+  select id
+  into existing_fencer_id
+  from public.fencers
+  where user_id = profile_user
+  limit 1;
+
+  if existing_fencer_id is not null then
+    raise exception 'Already in a club';
+  end if;
+
+  perform set_config('fencing.fencer_link', '1', true);
+
+  update public.fencers
+  set user_id = profile_user,
+      role = 'member',
+      name = profile_name
+  where id = p_fencer_id;
+
+  insert into public.club_members (club_id, user_id, role)
+  values (target.club_id, profile_user, 'member')
+  on conflict (club_id, user_id) do nothing;
+
+  return p_fencer_id;
+end;
+$$;
+
+create or replace function public.unlink_and_archive(p_fencer_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target public.fencers%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  if p_fencer_id is null then
+    raise exception 'Fencer not found';
+  end if;
+
+  select *
+  into target
+  from public.fencers
+  where id = p_fencer_id;
+
+  if target.id is null or not public.is_club_member(target.club_id) then
+    raise exception 'Fencer not found';
+  end if;
+
+  if target.user_id is null then
+    raise exception 'Fencer is not linked';
+  end if;
+
+  perform pg_advisory_xact_lock(871234001, hashtext(target.user_id::text));
+  perform pg_advisory_xact_lock(871234003, hashtext(p_fencer_id::text));
+
+  perform set_config('fencing.fencer_link', '1', true);
+
+  update public.fencers
+  set user_id = null,
+      role = null,
+      archived_at = coalesce(archived_at, now())
+  where id = p_fencer_id;
+
+  delete from public.club_members
+  where club_id = target.club_id
+    and user_id = target.user_id;
+
+  return p_fencer_id;
+end;
+$$;
 
 create table public.matches (
   id uuid primary key default gen_random_uuid(),
@@ -576,6 +719,8 @@ revoke all on function public.is_club_owner(uuid) from public;
 revoke all on function public.save_own_profile(text) from public;
 revoke all on function public.create_own_club(text) from public;
 revoke all on function public.rename_own_club(text) from public;
+revoke all on function public.link_fencer_to_profile(uuid, text) from public;
+revoke all on function public.unlink_and_archive(uuid) from public;
 revoke all on function public.profiles_assign_public_id() from public;
 revoke all on function public.fencers_freeze_link() from public;
 revoke all on function public.fencers_protect_last_owner() from public;
@@ -584,6 +729,8 @@ grant execute on function public.is_club_owner(uuid) to authenticated;
 grant execute on function public.save_own_profile(text) to authenticated;
 grant execute on function public.create_own_club(text) to authenticated;
 grant execute on function public.rename_own_club(text) to authenticated;
+grant execute on function public.link_fencer_to_profile(uuid, text) to authenticated;
+grant execute on function public.unlink_and_archive(uuid) to authenticated;
 
 grant usage on type public.club_member_role to authenticated;
 
