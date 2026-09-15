@@ -149,7 +149,6 @@ export default function TournamentPage() {
     );
   }
 
-  const canEditCheckIn = event.status === "setup";
   const checkedCount = tournament.checkedInIds.size;
   const fencerName = (fencerId: string | null) =>
     nameFromParticipants(tournament.participants, fencerId);
@@ -182,79 +181,79 @@ export default function TournamentPage() {
         <p className="text-sm text-destructive mb-4">{tournament.error}</p>
       ) : null}
 
-      <section className="space-y-4 mb-10">
-        <div>
-          <h2 className="text-lg font-medium">Check-in</h2>
-          <p className="text-sm text-muted-foreground">
-            Mark who is fencing today. Guests are named here and stay off the club roster.
-          </p>
-        </div>
+      {event.status === "setup" ? (
+        <section className="space-y-4 mb-10">
+          <div>
+            <h2 className="text-lg font-medium">Check-in</h2>
+            <p className="text-sm text-muted-foreground">
+              Mark who is fencing today. Guests are named here and stay off the club roster.
+            </p>
+          </div>
 
-        {tournament.roster.isLoading ? (
-          <p className="text-muted-foreground">Loading roster…</p>
-        ) : (
-          <div className="space-y-6">
-            <div className="space-y-3">
-              <h3 className="text-sm font-medium text-muted-foreground">From roster</h3>
-              {tournament.roster.active.length === 0 ? (
-                <p className="text-muted-foreground">
-                  No fencers in the roster.{" "}
-                  <Link to="/fencers" className="text-primary underline underline-offset-4">
-                    Add names on Fencers
-                  </Link>
-                  , or add a guest below.
-                </p>
-              ) : (
-                <ul className="space-y-3">
-                  {tournament.roster.active.map((fencer) => (
-                    <li key={fencer.id}>
-                      <CheckInRow
-                        id={fencer.id}
-                        name={fencer.name}
-                        checked={tournament.checkedInIds.has(fencer.id)}
-                        disabled={!canEditCheckIn || checkInBusy}
-                        onToggle={async (checked) => {
-                          try {
-                            if (checked) await tournament.checkIn.mutateAsync(fencer.id);
-                            else await tournament.checkOut.mutateAsync(fencer.id);
-                          } catch (error) {
-                            toast.error(tournament.mutationError(error));
-                          }
-                        }}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            {extraCheckedIn.length > 0 ? (
+          {tournament.roster.isLoading ? (
+            <p className="text-muted-foreground">Loading roster…</p>
+          ) : (
+            <div className="space-y-6">
               <div className="space-y-3">
-                <h3 className="text-sm font-medium text-muted-foreground">Guests</h3>
-                <ul className="space-y-3">
-                  {extraCheckedIn.map((row) => (
-                    <li key={row.fencerId}>
-                      <CheckInRow
-                        id={row.fencerId}
-                        name={row.name}
-                        checked
-                        disabled={!canEditCheckIn || checkInBusy}
-                        onToggle={async (checked) => {
-                          if (checked) return;
-                          try {
-                            await tournament.checkOut.mutateAsync(row.fencerId);
-                          } catch (error) {
-                            toast.error(tournament.mutationError(error));
-                          }
-                        }}
-                      />
-                    </li>
-                  ))}
-                </ul>
+                <h3 className="text-sm font-medium text-muted-foreground">From roster</h3>
+                {tournament.roster.active.length === 0 ? (
+                  <p className="text-muted-foreground">
+                    No fencers in the roster.{" "}
+                    <Link to="/fencers" className="text-primary underline underline-offset-4">
+                      Add names on Fencers
+                    </Link>
+                    , or add a guest below.
+                  </p>
+                ) : (
+                  <ul className="space-y-3">
+                    {tournament.roster.active.map((fencer) => (
+                      <li key={fencer.id}>
+                        <CheckInRow
+                          id={fencer.id}
+                          name={fencer.name}
+                          checked={tournament.checkedInIds.has(fencer.id)}
+                          disabled={checkInBusy}
+                          onToggle={async (checked) => {
+                            try {
+                              if (checked) await tournament.checkIn.mutateAsync(fencer.id);
+                              else await tournament.checkOut.mutateAsync(fencer.id);
+                            } catch (error) {
+                              toast.error(tournament.mutationError(error));
+                            }
+                          }}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
-            ) : null}
 
-            {canEditCheckIn ? (
+              {extraCheckedIn.length > 0 ? (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium text-muted-foreground">Guests</h3>
+                  <ul className="space-y-3">
+                    {extraCheckedIn.map((row) => (
+                      <li key={row.fencerId}>
+                        <CheckInRow
+                          id={row.fencerId}
+                          name={row.name}
+                          checked
+                          disabled={checkInBusy}
+                          onToggle={async (checked) => {
+                            if (checked) return;
+                            try {
+                              await tournament.checkOut.mutateAsync(row.fencerId);
+                            } catch (error) {
+                              toast.error(tournament.mutationError(error));
+                            }
+                          }}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
               <GuestCheckInForm
                 saving={tournament.checkInGuest.isPending}
                 onAdd={async (input) => {
@@ -267,20 +266,16 @@ export default function TournamentPage() {
                   }
                 }}
               />
-            ) : null}
-          </div>
-        )}
+            </div>
+          )}
 
-        {canEditCheckIn ? (
           <p className="text-sm text-muted-foreground">
             {checkedCount < 2
               ? "Check in at least two fencers to continue."
               : `${checkedCount} checked in.`}
           </p>
-        ) : (
-          <p className="text-sm text-muted-foreground">Check-in is locked for this event.</p>
-        )}
-      </section>
+        </section>
+      ) : null}
 
       {event.status === "setup" && checkedCount >= 2 ? (
         <SetupPanel tournament={tournament} />
