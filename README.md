@@ -63,7 +63,7 @@ VITE_SUPABASE_ANON_KEY=your_anon_key
 
 Only the anon key belongs in the client. Do not put `service_role` in Vite env or GitHub Actions.
 
-Roster and matches belong to a `clubs` row. Users have a `profiles` display name and a digit-only `public_id` (assigned from 1001, then max+1). Club access is an active `fencers` row with their `user_id` (`owner`, `trainer`, `member`). Linked roster names follow the profile; `link_fencer_to_profile` / `unlink_and_archive` are the only way to attach or detach an account. Signup does not create a club. After sign-in the user enters a name, then may create a club (they become `owner` and a roster row) or skip. Account settings show the public ID as read-only. RLS keeps members to their club's `fencers` and `matches`. The UI does not switch clubs or show roles yet.
+Roster and matches belong to a `clubs` row. Users have a `profiles` display name and a digit-only `public_id` (assigned from 1001, then max+1). Club access is an active `fencers` row with their `user_id` (`owner`, `trainer`, `member`). Linked roster names follow the profile. The roster can add or attach an account by that ID (`add_linked_fencer` / `link_fencer_to_profile`); archive of a linked row unlinks (`unlink_and_archive`). Signup does not create a club. After sign-in the user enters a name, then may create a club (they become `owner` and a roster row) or skip. Account settings show the public ID as read-only. RLS keeps members to their club's `fencers` and `matches`. The UI does not switch clubs or show roles yet.
 
 ## Deploy
 

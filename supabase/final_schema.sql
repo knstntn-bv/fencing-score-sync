@@ -590,6 +590,73 @@ begin
 end;
 $$;
 
+create or replace function public.add_linked_fencer(p_public_id text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  normalized text;
+  profile_user uuid;
+  profile_name text;
+  my_club uuid;
+  existing_fencer_id uuid;
+  new_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  normalized := nullif(trim(p_public_id), '');
+  if normalized is null or normalized !~ '^[0-9]+$' then
+    raise exception 'ID is required';
+  end if;
+
+  select club_id
+  into my_club
+  from public.fencers
+  where user_id = auth.uid()
+    and archived_at is null
+  limit 1;
+
+  if my_club is null then
+    raise exception 'Not a club member';
+  end if;
+
+  select user_id, name
+  into profile_user, profile_name
+  from public.profiles
+  where public_id = normalized;
+
+  if profile_user is null then
+    raise exception 'Profile not found';
+  end if;
+
+  perform pg_advisory_xact_lock(871234001, hashtext(profile_user::text));
+
+  select id
+  into existing_fencer_id
+  from public.fencers
+  where user_id = profile_user
+  limit 1;
+
+  if existing_fencer_id is not null then
+    raise exception 'Already in a club';
+  end if;
+
+  insert into public.fencers (club_id, name, user_id, role)
+  values (my_club, profile_name, profile_user, 'member')
+  returning id into new_id;
+
+  insert into public.club_members (club_id, user_id, role)
+  values (my_club, profile_user, 'member')
+  on conflict (club_id, user_id) do nothing;
+
+  return new_id;
+end;
+$$;
+
 create table public.matches (
   id uuid primary key default gen_random_uuid(),
   club_id uuid not null references public.clubs (id) on delete cascade,
@@ -721,6 +788,7 @@ revoke all on function public.create_own_club(text) from public;
 revoke all on function public.rename_own_club(text) from public;
 revoke all on function public.link_fencer_to_profile(uuid, text) from public;
 revoke all on function public.unlink_and_archive(uuid) from public;
+revoke all on function public.add_linked_fencer(text) from public;
 revoke all on function public.profiles_assign_public_id() from public;
 revoke all on function public.fencers_freeze_link() from public;
 revoke all on function public.fencers_protect_last_owner() from public;
@@ -731,6 +799,7 @@ grant execute on function public.create_own_club(text) to authenticated;
 grant execute on function public.rename_own_club(text) to authenticated;
 grant execute on function public.link_fencer_to_profile(uuid, text) to authenticated;
 grant execute on function public.unlink_and_archive(uuid) to authenticated;
+grant execute on function public.add_linked_fencer(text) to authenticated;
 
 grant usage on type public.club_member_role to authenticated;
 
