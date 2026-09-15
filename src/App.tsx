@@ -11,6 +11,7 @@ import { useMatchOutboxFlush } from "@/hooks/useMatchOutbox";
 import { readSettings, writeSettings, type ClubSettings } from "@/lib/settings";
 import Index from "./pages/Index";
 import Settings from "./pages/Settings";
+import Account from "./pages/Account";
 import Fencers from "./pages/Fencers";
 import FencerStats from "./pages/FencerStats";
 import History from "./pages/History";
@@ -92,6 +93,7 @@ const App = () => {
                   }
                 />
                 <Route path="/settings" element={<Settings settings={settings} onSave={saveSettings} />} />
+                <Route path="/settings/account" element={<Account />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>

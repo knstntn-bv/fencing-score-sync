@@ -77,6 +77,22 @@ as $$
   );
 $$;
 
+create or replace function public.is_club_owner(p_club_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.club_members
+    where club_id = p_club_id
+      and user_id = auth.uid()
+      and role = 'owner'
+  );
+$$;
+
 create or replace function public.club_members_protect_last_owner()
 returns trigger
 language plpgsql
@@ -189,6 +205,11 @@ begin
   on conflict (user_id) do update
     set name = excluded.name;
 
+  update public.fencers
+  set name = normalized
+  where user_id = auth.uid()
+    and archived_at is null;
+
   return normalized;
 end;
 $$;
@@ -247,6 +268,47 @@ begin
   values (new_club_id, profile_name, auth.uid());
 
   return new_club_id;
+end;
+$$;
+
+create or replace function public.rename_own_club(p_name text)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  club_name text;
+  target_club_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  club_name := nullif(trim(regexp_replace(p_name, '\s+', ' ', 'g')), '');
+  if club_name is null then
+    raise exception 'Club name is required';
+  end if;
+
+  perform pg_advisory_xact_lock(871234001, hashtext(auth.uid()::text));
+
+  select club_id
+  into target_club_id
+  from public.club_members
+  where user_id = auth.uid()
+    and role = 'owner'
+  order by created_at asc
+  limit 1;
+
+  if target_club_id is null then
+    raise exception 'Only the owner can rename the club';
+  end if;
+
+  update public.clubs
+  set name = club_name
+  where id = target_club_id;
+
+  return club_name;
 end;
 $$;
 
@@ -335,6 +397,12 @@ create policy "clubs_select_member"
   to authenticated
   using (public.is_club_member(id));
 
+create policy "clubs_update_owner"
+  on public.clubs for update
+  to authenticated
+  using (public.is_club_owner(id))
+  with check (public.is_club_owner(id));
+
 create policy "club_members_select_own"
   on public.club_members for select
   to authenticated
@@ -397,11 +465,15 @@ create policy "matches_insert_member"
 -- Matches are append-only. No update/delete policies.
 
 revoke all on function public.is_club_member(uuid) from public;
+revoke all on function public.is_club_owner(uuid) from public;
 revoke all on function public.save_own_profile(text) from public;
 revoke all on function public.create_own_club(text) from public;
+revoke all on function public.rename_own_club(text) from public;
 grant execute on function public.is_club_member(uuid) to authenticated;
+grant execute on function public.is_club_owner(uuid) to authenticated;
 grant execute on function public.save_own_profile(text) to authenticated;
 grant execute on function public.create_own_club(text) to authenticated;
+grant execute on function public.rename_own_club(text) to authenticated;
 
 grant usage on type public.club_member_role to authenticated;
 
@@ -410,7 +482,7 @@ revoke all on public.club_members from anon;
 revoke all on public.profiles from anon;
 revoke all on public.fencers from anon;
 revoke all on public.matches from anon;
-grant select on public.clubs to authenticated;
+grant select, update on public.clubs to authenticated;
 grant select on public.club_members to authenticated;
 grant select, insert, update on public.profiles to authenticated;
 grant select, insert, update on public.fencers to authenticated;

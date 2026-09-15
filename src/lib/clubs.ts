@@ -27,12 +27,17 @@ function mapMembership(row: ClubMemberRow): ClubMembership {
 }
 
 function mapRpcError(error: unknown, fallback: string): Error {
-  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
-    const message = error.message;
+  if (error && typeof error === "object") {
+    const code = "code" in error && typeof error.code === "string" ? error.code : "";
+    const message = "message" in error && typeof error.message === "string" ? error.message : "";
+    if (code === "23505") return new Error("A fencer with this name already exists.");
     if (message.includes("Already in a club")) return new Error("You already belong to a club.");
     if (message.includes("Club name is required")) return new Error("Enter a club name.");
     if (message.includes("Name is required")) return new Error("Enter your name.");
     if (message.includes("Profile name is required")) return new Error("Enter your name first.");
+    if (message.includes("Only the owner can rename the club")) {
+      return new Error("Only the club owner can change the club name.");
+    }
     if (message) return new Error(message);
   }
   if (error instanceof Error && error.message) return error;
@@ -48,14 +53,18 @@ export async function listOwnMemberships(): Promise<ClubMembership[]> {
   return (data ?? []).map(mapMembership);
 }
 
-export function pickCurrentClubId(memberships: ClubMembership[]): string | null {
+export function pickCurrentMembership(memberships: ClubMembership[]): ClubMembership | null {
   if (memberships.length === 0) return null;
   const ranked = [...memberships].sort((a, b) => {
     const ownerDelta = Number(b.role === "owner") - Number(a.role === "owner");
     if (ownerDelta !== 0) return ownerDelta;
     return a.createdAt.localeCompare(b.createdAt);
   });
-  return ranked[0].clubId;
+  return ranked[0];
+}
+
+export function pickCurrentClubId(memberships: ClubMembership[]): string | null {
+  return pickCurrentMembership(memberships)?.clubId ?? null;
 }
 
 export async function resolveCurrentClubId(): Promise<string | null> {
@@ -82,6 +91,13 @@ export async function createOwnClub(name: string): Promise<string> {
   return data;
 }
 
+export async function renameOwnClub(name: string): Promise<string> {
+  const { data, error } = await requireSupabase().rpc("rename_own_club", { p_name: name });
+  if (error) throw mapRpcError(error, "Could not rename the club.");
+  if (!data) throw new Error("Could not rename the club.");
+  return data;
+}
+
 export async function getClubName(clubId: string): Promise<string> {
   const { data, error } = await requireSupabase()
     .from("clubs")
@@ -96,6 +112,8 @@ export async function getClubName(clubId: string): Promise<string> {
 export type OwnAccount = {
   profile: Profile | null;
   clubId: string | null;
+  clubRole: ClubMemberRole | null;
+  clubName: string | null;
 };
 
 function wait(ms: number): Promise<void> {
@@ -106,8 +124,15 @@ function wait(ms: number): Promise<void> {
 
 export async function loadOwnAccount(): Promise<OwnAccount> {
   await requireSupabase().auth.getSession();
-  const [profile, clubId] = await Promise.all([getOwnProfile(), resolveCurrentClubId()]);
-  return { profile, clubId };
+  const [profile, memberships] = await Promise.all([getOwnProfile(), listOwnMemberships()]);
+  const membership = pickCurrentMembership(memberships);
+  const clubName = membership ? await getClubName(membership.clubId) : null;
+  return {
+    profile,
+    clubId: membership?.clubId ?? null,
+    clubRole: membership?.role ?? null,
+    clubName,
+  };
 }
 
 export async function loadOwnAccountWithRetry(attempts = 4): Promise<OwnAccount> {
