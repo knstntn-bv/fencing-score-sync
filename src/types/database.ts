@@ -371,6 +371,10 @@ export type Database = {
         Args: { p_fencer_id: string };
         Returns: string;
       };
+      add_linked_fencer: {
+        Args: { p_public_id: string };
+        Returns: string;
+      };
     };
     Enums: {
       club_member_role: "owner" | "trainer" | "member";

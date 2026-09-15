@@ -1,6 +1,6 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Archive, BarChart3, Check, Pencil, RotateCcw, UserPlus, Users, X } from "lucide-react";
+import { Archive, BarChart3, Check, Hash, Link2, Pencil, RotateCcw, UserPlus, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { ClubPageHeader } from "@/components/ClubNav";
 import {
@@ -16,19 +16,31 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/context/AuthContext";
 import { useFencers } from "@/hooks/useFencers";
 import { isLinkedFencer } from "@/lib/fencers";
+import { lookupCheckinByPublicId, normalizePublicId, type CheckInLookup } from "@/lib/tournaments";
 import type { Fencer } from "@/types/fencing";
 
+type LinkDialogState = { mode: "add" } | { mode: "attach"; fencer: Fencer };
+
 export default function FencersPage() {
-  const { configured, user, retryAccount } = useAuth();
+  const { configured, user, clubId, retryAccount } = useAuth();
   const fencers = useFencers();
   const [name, setName] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  const [linkDialog, setLinkDialog] = useState<LinkDialogState | null>(null);
 
   const handleCreate = async (event: FormEvent) => {
     event.preventDefault();
@@ -72,6 +84,16 @@ export default function FencersPage() {
           <UserPlus className="h-4 w-4 mr-2" />
           Add
         </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="sm:self-end"
+          disabled={fencers.addById.isPending}
+          onClick={() => setLinkDialog({ mode: "add" })}
+        >
+          <Hash className="h-4 w-4 mr-2" />
+          Add by ID
+        </Button>
       </form>
 
       {fencers.error ? (
@@ -82,7 +104,7 @@ export default function FencersPage() {
         <p className="text-muted-foreground">Loading roster…</p>
       ) : fencers.active.length === 0 ? (
         <p className="text-muted-foreground mb-6">
-          No fencers yet. Add names here before selecting them on the scoreboard.
+          No fencers yet. Add a name or add an account by ID.
         </p>
       ) : (
         <ul className="space-y-3 mb-6">
@@ -99,6 +121,7 @@ export default function FencersPage() {
                     throw error;
                   }
                 }}
+                onLink={() => setLinkDialog({ mode: "attach", fencer })}
                 onArchive={async () => {
                   try {
                     await fencers.archive.mutateAsync(fencer);
@@ -164,6 +187,27 @@ export default function FencersPage() {
           ) : null}
         </div>
       ) : null}
+
+      <LinkAccountDialog
+        open={linkDialog !== null}
+        mode={linkDialog?.mode ?? "add"}
+        fencer={linkDialog?.mode === "attach" ? linkDialog.fencer : null}
+        clubId={clubId}
+        busy={fencers.link.isPending || fencers.addById.isPending}
+        errorMessage={fencers.mutationError}
+        onOpenChange={(open) => {
+          if (!open) setLinkDialog(null);
+        }}
+        onConfirm={async (publicId) => {
+          if (linkDialog?.mode === "attach") {
+            await fencers.link.mutateAsync({ fencerId: linkDialog.fencer.id, publicId });
+            toast.success("Account linked");
+          } else {
+            await fencers.addById.mutateAsync(publicId);
+            toast.success("Account added to the roster");
+          }
+        }}
+      />
     </FencersShell>
   );
 }
@@ -186,10 +230,12 @@ function FencersShell({ children }: { children: ReactNode }) {
 function FencerRow({
   fencer,
   onRename,
+  onLink,
   onArchive,
 }: {
   fencer: Fencer;
   onRename: (name: string) => Promise<void>;
+  onLink: () => void;
   onArchive: () => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
@@ -256,27 +302,43 @@ function FencerRow({
         <div className="flex flex-wrap justify-end gap-2">
           <FencerStatsButton fencer={fencer} />
           {linked ? null : (
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label={`Rename ${fencer.name}`}
-              onClick={() => {
-                setDraft(fencer.name);
-                setEditing(true);
-              }}
-            >
-              <Pencil className="h-4 w-4" />
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label={`Link account to ${fencer.name}`}
+                onClick={onLink}
+              >
+                <Link2 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label={`Rename ${fencer.name}`}
+                onClick={() => {
+                  setDraft(fencer.name);
+                  setEditing(true);
+                }}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            </>
           )}
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="outline" size="icon" aria-label={`Archive ${fencer.name}`}>
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label={linked ? `Unlink and archive ${fencer.name}` : `Archive ${fencer.name}`}
+              >
                 <Archive className="h-4 w-4" />
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Archive {fencer.name}?</AlertDialogTitle>
+                <AlertDialogTitle>
+                  {linked ? `Unlink and archive ${fencer.name}?` : `Archive ${fencer.name}?`}
+                </AlertDialogTitle>
                 <AlertDialogDescription>
                   {linked
                     ? "This unlinks their account and archives the roster row. Bout history stays. The last owner cannot be removed."
@@ -285,13 +347,180 @@ function FencerRow({
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={() => void onArchive()}>Archive</AlertDialogAction>
+                <AlertDialogAction onClick={() => void onArchive()}>
+                  {linked ? "Unlink" : "Archive"}
+                </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function LinkAccountDialog({
+  open,
+  mode,
+  fencer,
+  clubId,
+  busy,
+  errorMessage,
+  onOpenChange,
+  onConfirm,
+}: {
+  open: boolean;
+  mode: "add" | "attach";
+  fencer: Fencer | null;
+  clubId: string | null;
+  busy: boolean;
+  errorMessage: (error: unknown) => string;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: (publicId: string) => Promise<void>;
+}) {
+  const [publicId, setPublicId] = useState("");
+  const [lookingUp, setLookingUp] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [preview, setPreview] = useState<CheckInLookup | null>(null);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setPublicId("");
+      setPreview(null);
+      setLookupError(null);
+      setLookingUp(false);
+      setSaving(false);
+    }
+  }, [open]);
+
+  const blockedReason = preview
+    ? preview.fencerId
+      ? "That account is already on this roster."
+      : preview.clubName
+        ? `That account already belongs to ${preview.clubName}.`
+        : null
+    : null;
+  const canConfirm = Boolean(preview && !blockedReason && !busy && !saving);
+
+  const lookUp = async (event: FormEvent) => {
+    event.preventDefault();
+    if (lookingUp || saving || busy) return;
+    if (!clubId) {
+      setLookupError("You need to be in a club.");
+      return;
+    }
+    if (!normalizePublicId(publicId)) {
+      setLookupError("Enter a valid ID.");
+      setPreview(null);
+      return;
+    }
+    setLookingUp(true);
+    setLookupError(null);
+    setPreview(null);
+    try {
+      const found = await lookupCheckinByPublicId(publicId, clubId);
+      if (!found) {
+        setLookupError("No account has that ID.");
+        return;
+      }
+      setPreview(found);
+    } catch (error) {
+      setLookupError(errorMessage(error));
+    } finally {
+      setLookingUp(false);
+    }
+  };
+
+  const confirm = async () => {
+    if (!preview || blockedReason || saving || busy) return;
+    const id = normalizePublicId(publicId);
+    if (!id) return;
+    setSaving(true);
+    try {
+      await onConfirm(id);
+      onOpenChange(false);
+    } catch (error) {
+      setLookupError(errorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <form
+          onSubmit={(event) => {
+            if (preview && canConfirm) {
+              event.preventDefault();
+              void confirm();
+              return;
+            }
+            void lookUp(event);
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{mode === "attach" ? `Link ${fencer?.name ?? "fencer"}` : "Add by ID"}</DialogTitle>
+            <DialogDescription>
+              {mode === "attach"
+                ? "Use the number from their Account. This roster name will take the account name."
+                : "Use the number from their Account. They join the roster with that name. If they already have a roster name, link that row instead."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="roster-public-id">ID</Label>
+              <Input
+                id="roster-public-id"
+                value={publicId}
+                onChange={(event) => {
+                  setPublicId(event.target.value);
+                  setPreview(null);
+                  setLookupError(null);
+                }}
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="1001"
+                autoComplete="off"
+                autoFocus
+              />
+            </div>
+            {preview ? (
+              <div className="rounded-md border bg-muted/40 p-3 space-y-1">
+                <p className="font-medium">{preview.name}</p>
+                {blockedReason ? (
+                  <p className="text-sm text-destructive">{blockedReason}</p>
+                ) : mode === "attach" ? (
+                  <p className="text-sm text-muted-foreground">
+                    {fencer && fencer.name !== preview.name
+                      ? `${fencer.name} will become ${preview.name}.`
+                      : "This roster name will be linked to the account."}
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Will be added to the roster.</p>
+                )}
+              </div>
+            ) : null}
+            {lookupError ? <p className="text-sm text-destructive">{lookupError}</p> : null}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            {preview && !blockedReason ? (
+              <Button type="submit" disabled={!canConfirm}>
+                {saving ? "Saving…" : mode === "attach" ? "Link" : "Add"}
+              </Button>
+            ) : (
+              <Button type="submit" disabled={lookingUp || busy || !publicId.trim()}>
+                {lookingUp ? "Looking up…" : "Look up"}
+              </Button>
+            )}
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

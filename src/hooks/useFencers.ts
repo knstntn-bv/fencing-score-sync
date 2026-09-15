@@ -2,9 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import {
+  addLinkedFencer,
   archiveFencer,
   createFencer,
   fencerErrorMessage,
+  linkFencerToProfile,
   listFencers,
   readFencerCache,
   renameFencer,
@@ -62,6 +64,17 @@ export function useFencers() {
     onSuccess: invalidate,
   });
 
+  const link = useMutation({
+    mutationFn: ({ fencerId, publicId }: { fencerId: string; publicId: string }) =>
+      linkFencerToProfile(fencerId, publicId),
+    onSuccess: invalidate,
+  });
+
+  const addById = useMutation({
+    mutationFn: (publicId: string) => addLinkedFencer(publicId),
+    onSuccess: invalidate,
+  });
+
   const fencers: Fencer[] = query.data ?? [];
   const active = fencers.filter((fencer) => !fencer.archivedAt);
   const archived = fencers.filter((fencer) => fencer.archivedAt);
@@ -78,6 +91,8 @@ export function useFencers() {
     rename,
     archive,
     restore,
+    link,
+    addById,
     mutationError: (error: unknown) => fencerErrorMessage(error, "Request failed."),
   };
 }

@@ -63,6 +63,9 @@ function rpcErrorMessage(message: string): string | null {
   if (message.includes("ID is required")) {
     return "Enter a valid ID.";
   }
+  if (message.includes("Not a club member")) {
+    return "You need to be in a club.";
+  }
   return null;
 }
 
@@ -157,6 +160,15 @@ export async function linkFencerToProfile(fencerId: string, publicId: string): P
   });
   if (error) throw error;
   if (!data) throw new Error("Could not link this account.");
+  return data;
+}
+
+export async function addLinkedFencer(publicId: string): Promise<string> {
+  const { data, error } = await requireSupabase().rpc("add_linked_fencer", {
+    p_public_id: publicId,
+  });
+  if (error) throw error;
+  if (!data) throw new Error("Could not add this account.");
   return data;
 }
 
