@@ -14,12 +14,13 @@ export type Profile = {
   publicId: string;
 };
 
-type ClubMemberRow = Pick<
-  Database["public"]["Tables"]["club_members"]["Row"],
+type ClubFencerRow = Pick<
+  Database["public"]["Tables"]["fencers"]["Row"],
   "club_id" | "role" | "created_at"
 >;
 
-function mapMembership(row: ClubMemberRow): ClubMembership {
+function mapMembership(row: ClubFencerRow): ClubMembership | null {
+  if (!row.role) return null;
   return {
     clubId: row.club_id,
     role: row.role,
@@ -46,12 +47,22 @@ function mapRpcError(error: unknown, fallback: string): Error {
 }
 
 export async function listOwnMemberships(): Promise<ClubMembership[]> {
-  const { data, error } = await requireSupabase()
-    .from("club_members")
-    .select("club_id, role, created_at");
+  const supabase = requireSupabase();
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+  const userId = sessionData.session?.user?.id;
+  if (!userId) return [];
+
+  const { data, error } = await supabase
+    .from("fencers")
+    .select("club_id, role, created_at")
+    .eq("user_id", userId)
+    .is("archived_at", null)
+    .maybeSingle();
 
   if (error) throw error;
-  return (data ?? []).map(mapMembership);
+  const membership = data ? mapMembership(data) : null;
+  return membership ? [membership] : [];
 }
 
 export function pickCurrentMembership(memberships: ClubMembership[]): ClubMembership | null {
