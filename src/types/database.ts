@@ -72,6 +72,7 @@ export type Database = {
           id: string;
           club_id: string;
           user_id: string | null;
+          role: Database["public"]["Enums"]["club_member_role"] | null;
           name: string;
           archived_at: string | null;
           created_at: string;
@@ -81,6 +82,7 @@ export type Database = {
           id?: string;
           club_id: string;
           user_id?: string | null;
+          role?: Database["public"]["Enums"]["club_member_role"] | null;
           name: string;
           archived_at?: string | null;
           created_at?: string;
@@ -90,6 +92,7 @@ export type Database = {
           id?: string;
           club_id?: string;
           user_id?: string | null;
+          role?: Database["public"]["Enums"]["club_member_role"] | null;
           name?: string;
           archived_at?: string | null;
           created_at?: string;

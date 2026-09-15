@@ -11,6 +11,7 @@ export function mapFencer(row: FencerRow): Fencer {
     id: row.id,
     clubId: row.club_id,
     userId: row.user_id,
+    role: row.role ?? null,
     name: row.name,
     archivedAt: row.archived_at,
     createdAt: row.created_at,
