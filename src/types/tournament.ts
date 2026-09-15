@@ -36,6 +36,9 @@ export type TournamentParticipant = {
   tournamentId: string;
   fencerId: string;
   clubId: string;
+  name: string;
+  clubName: string | null;
+  isGuest: boolean;
   groupNo: number | null;
 };
 

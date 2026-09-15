@@ -14,6 +14,7 @@ export type KothExitRow = {
 export type KothStandingRow = {
   fencerId: string;
   name: string;
+  clubName: string | null;
   wins: number;
   bestStreak: number;
   titles: {
@@ -96,7 +97,7 @@ export function kothChallengerIds(exits: KothExitRow[]): Set<string> {
 }
 
 export function computeKothStandings(
-  people: { id: string; name: string }[],
+  people: { id: string; name: string; clubName?: string | null }[],
   bouts: TournamentBout[]
 ): KothStandingRow[] {
   const wins = new Map(people.map((person) => [person.id, 0]));
@@ -118,6 +119,7 @@ export function computeKothStandings(
   const rows: KothStandingRow[] = people.map((person) => ({
     fencerId: person.id,
     name: person.name,
+    clubName: person.clubName ?? null,
     wins: wins.get(person.id) ?? 0,
     bestStreak: best.get(person.id) ?? 0,
     titles: { wins: false, streak: false, last: person.id === lastId },

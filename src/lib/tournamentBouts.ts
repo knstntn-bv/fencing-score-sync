@@ -266,10 +266,9 @@ export async function syncSwiss(
     return false;
   }
   const participants = await listParticipants(tournamentId);
-  const names = await fencerNamesById(participants.map((row) => row.fencerId));
   const people = participants.map((row) => ({
     id: row.fencerId,
-    name: names.get(row.fencerId) ?? row.fencerId,
+    name: row.name,
   }));
   const ids = participants.map((row) => row.fencerId);
   let bouts = await listTournamentBouts(tournamentId);
@@ -328,14 +327,6 @@ export async function applyPlayoffFencerUpdates(
   }
 }
 
-async function fencerNamesById(ids: string[]): Promise<Map<string, string>> {
-  const unique = [...new Set(ids)];
-  if (unique.length === 0) return new Map();
-  const { data, error } = await requireSupabase().from("fencers").select("id, name").in("id", unique);
-  if (error) throw error;
-  return new Map((data ?? []).map((row) => [row.id, row.name]));
-}
-
 export async function syncGroupsAndPlayoff(tournamentId: string): Promise<boolean> {
   const tournament = await getTournament(tournamentId);
   let bouts = await listTournamentBouts(tournamentId);
@@ -348,10 +339,9 @@ export async function syncGroupsAndPlayoff(tournamentId: string): Promise<boolea
     tournament.advancersPerGroup
   ) {
     const participants = await listParticipants(tournamentId);
-    const names = await fencerNamesById(participants.map((row) => row.fencerId));
     const people = participants.map((row) => ({
       id: row.fencerId,
-      name: names.get(row.fencerId) ?? row.fencerId,
+      name: row.name,
       groupNo: row.groupNo,
     }));
     const { patches } = groupPlayoffFencerPatches(
@@ -400,9 +390,8 @@ export async function resolveGroupCutoff(input: {
     throw new Error("That fencer is not in this group.");
   }
 
-  const names = await fencerNamesById(members.map((row) => row.fencerId));
   const standings = computeStandings(
-    members.map((row) => ({ id: row.fencerId, name: names.get(row.fencerId) ?? row.fencerId })),
+    members.map((row) => ({ id: row.fencerId, name: row.name })),
     bouts.filter((bout) => bout.stage === "group" && bout.groupNo === input.groupNo),
     tournament.pointsScheme
   );

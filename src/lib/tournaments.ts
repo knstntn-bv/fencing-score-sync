@@ -1,6 +1,7 @@
 import { format } from "date-fns";
 import type { Database } from "@/types/database";
 import type { Tournament, TournamentFormat, TournamentParticipant, TournamentPointsScheme, TournamentStatus } from "@/types/tournament";
+import { normalizeFencerName } from "@/lib/fencers";
 import { requireSupabase } from "@/lib/supabase";
 
 type TournamentRow = Database["public"]["Tables"]["tournaments"]["Row"];
@@ -88,8 +89,16 @@ export function mapParticipant(row: ParticipantRow): TournamentParticipant {
     tournamentId: row.tournament_id,
     fencerId: row.fencer_id,
     clubId: row.club_id,
+    name: row.name,
+    clubName: row.club_name,
+    isGuest: row.is_guest,
     groupNo: row.group_no,
   };
+}
+
+export function normalizeClubName(name: string): string | null {
+  const next = name.trim().replace(/\s+/g, " ");
+  return next ? next : null;
 }
 
 export async function getTournament(id: string): Promise<Tournament | null> {
@@ -134,13 +143,26 @@ export async function addParticipant(input: {
   tournamentId: string;
   fencerId: string;
   clubId: string;
+  name: string;
+  clubName?: string | null;
+  isGuest?: boolean;
 }): Promise<TournamentParticipant> {
+  const name = normalizeFencerName(input.name);
+  if (!name) {
+    throw new Error("Name is required.");
+  }
+  const clubName =
+    input.clubName == null ? null : normalizeClubName(input.clubName);
+
   const { data, error } = await requireSupabase()
     .from("tournament_participants")
     .insert({
       tournament_id: input.tournamentId,
       fencer_id: input.fencerId,
       club_id: input.clubId,
+      name,
+      club_name: clubName,
+      is_guest: Boolean(input.isGuest),
     })
     .select("*")
     .single();

@@ -53,3 +53,14 @@ export async function resolveCurrentClubId(): Promise<string> {
   if (existing) return existing;
   return ensureOwnClub();
 }
+
+export async function getClubName(clubId: string): Promise<string> {
+  const { data, error } = await requireSupabase()
+    .from("clubs")
+    .select("name")
+    .eq("id", clubId)
+    .single();
+
+  if (error) throw error;
+  return data.name;
+}

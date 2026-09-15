@@ -87,7 +87,7 @@ export function swissByes(
 }
 
 export function computeSwissStandings(
-  people: { id: string; name: string }[],
+  people: { id: string; name: string; clubName?: string | null }[],
   bouts: TournamentBout[],
   scheme: TournamentPointsScheme
 ): StandingRow[] {

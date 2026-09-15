@@ -132,18 +132,27 @@ export type Database = {
           tournament_id: string;
           fencer_id: string;
           club_id: string;
+          name: string;
+          club_name: string | null;
+          is_guest: boolean;
           group_no: number | null;
         };
         Insert: {
           tournament_id: string;
           fencer_id: string;
           club_id: string;
+          name: string;
+          club_name?: string | null;
+          is_guest?: boolean;
           group_no?: number | null;
         };
         Update: {
           tournament_id?: string;
           fencer_id?: string;
           club_id?: string;
+          name?: string;
+          club_name?: string | null;
+          is_guest?: boolean;
           group_no?: number | null;
         };
         Relationships: [];

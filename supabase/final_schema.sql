@@ -407,10 +407,17 @@ create trigger tournaments_set_updated_at
 
 create table public.tournament_participants (
   tournament_id uuid not null references public.tournaments (id) on delete cascade,
-  fencer_id uuid not null references public.fencers (id),
+  fencer_id uuid not null,
   club_id uuid not null references public.clubs (id) on delete cascade,
+  name text not null,
+  club_name text,
+  is_guest boolean not null default false,
   group_no integer,
-  primary key (tournament_id, fencer_id)
+  primary key (tournament_id, fencer_id),
+  constraint tournament_participants_name_not_blank
+    check (char_length(trim(name)) > 0),
+  constraint tournament_participants_club_name_not_blank
+    check (club_name is null or char_length(trim(club_name)) > 0)
 );
 
 create index tournament_participants_club_id_idx
@@ -426,8 +433,8 @@ create table public.tournament_bouts (
   round_code text,
   sort_order integer not null,
 
-  blue_fencer_id uuid references public.fencers (id),
-  red_fencer_id uuid references public.fencers (id),
+  blue_fencer_id uuid,
+  red_fencer_id uuid,
   blue_placeholder text,
   red_placeholder text,
 
@@ -448,7 +455,7 @@ create table public.tournament_bouts (
   finished_at timestamptz,
   created_at timestamptz not null default now(),
 
-  koth_king_id uuid references public.fencers (id),
+  koth_king_id uuid,
 
   constraint tournament_bouts_blue_result_check
     check (blue_result is null or blue_result in ('win', 'lose', 'draw')),
@@ -532,9 +539,21 @@ create policy "tournament_participants_insert_member"
       select 1 from public.tournaments t
       where t.id = tournament_id and t.club_id = tournament_participants.club_id
     )
-    and exists (
-      select 1 from public.fencers f
-      where f.id = fencer_id and f.club_id = tournament_participants.club_id
+    and (
+      (
+        is_guest = false
+        and exists (
+          select 1 from public.fencers f
+          where f.id = fencer_id and f.club_id = tournament_participants.club_id
+        )
+      )
+      or (
+        is_guest = true
+        and not exists (
+          select 1 from public.fencers f
+          where f.id = fencer_id
+        )
+      )
     )
   );
 
@@ -548,9 +567,21 @@ create policy "tournament_participants_update_member"
       select 1 from public.tournaments t
       where t.id = tournament_id and t.club_id = tournament_participants.club_id
     )
-    and exists (
-      select 1 from public.fencers f
-      where f.id = fencer_id and f.club_id = tournament_participants.club_id
+    and (
+      (
+        is_guest = false
+        and exists (
+          select 1 from public.fencers f
+          where f.id = fencer_id and f.club_id = tournament_participants.club_id
+        )
+      )
+      or (
+        is_guest = true
+        and not exists (
+          select 1 from public.fencers f
+          where f.id = fencer_id
+        )
+      )
     )
   );
 
@@ -576,15 +607,19 @@ create policy "tournament_bouts_insert_member"
     and (
       blue_fencer_id is null
       or exists (
-        select 1 from public.fencers f
-        where f.id = blue_fencer_id and f.club_id = tournament_bouts.club_id
+        select 1 from public.tournament_participants p
+        where p.tournament_id = tournament_bouts.tournament_id
+          and p.fencer_id = blue_fencer_id
+          and p.club_id = tournament_bouts.club_id
       )
     )
     and (
       red_fencer_id is null
       or exists (
-        select 1 from public.fencers f
-        where f.id = red_fencer_id and f.club_id = tournament_bouts.club_id
+        select 1 from public.tournament_participants p
+        where p.tournament_id = tournament_bouts.tournament_id
+          and p.fencer_id = red_fencer_id
+          and p.club_id = tournament_bouts.club_id
       )
     )
   );
@@ -602,15 +637,19 @@ create policy "tournament_bouts_update_member"
     and (
       blue_fencer_id is null
       or exists (
-        select 1 from public.fencers f
-        where f.id = blue_fencer_id and f.club_id = tournament_bouts.club_id
+        select 1 from public.tournament_participants p
+        where p.tournament_id = tournament_bouts.tournament_id
+          and p.fencer_id = blue_fencer_id
+          and p.club_id = tournament_bouts.club_id
       )
     )
     and (
       red_fencer_id is null
       or exists (
-        select 1 from public.fencers f
-        where f.id = red_fencer_id and f.club_id = tournament_bouts.club_id
+        select 1 from public.tournament_participants p
+        where p.tournament_id = tournament_bouts.tournament_id
+          and p.fencer_id = red_fencer_id
+          and p.club_id = tournament_bouts.club_id
       )
     )
   );

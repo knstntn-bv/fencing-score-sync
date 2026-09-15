@@ -42,7 +42,6 @@ import { insertKothBout, saveTournamentBout } from "@/lib/tournamentBouts";
 import { kothChallengerIds } from "@/lib/tournament/kingOfHill";
 import { playoffOverrideBlock } from "@/lib/tournament/override";
 import { tournamentErrorMessage } from "@/lib/tournaments";
-import type { Fencer } from "@/types/fencing";
 
 interface IndexProps {
   settings: {
@@ -60,7 +59,7 @@ const Index = ({ settings }: IndexProps) => {
   const [params] = useSearchParams();
   const tournamentId = params.get("t");
   const boutId = params.get("b");
-  const event = useTournament(tournamentId && !boutId ? tournamentId : undefined);
+  const event = useTournament(tournamentId ?? undefined);
   const slot = useTournamentSlot(tournamentId, boutId);
   const tournaments = useTournaments();
   const hasOpenTournament = tournaments.tournaments.some((row) => row.status !== "done");
@@ -117,16 +116,20 @@ const Index = ({ settings }: IndexProps) => {
   const namesLocked =
     hasMatchStarted || winner !== null || Boolean(slot.bout) || (kothBoard && saved);
 
-  const kothFencers = [...event.roster.active, ...event.roster.archived].filter(
-    (fencer, index, all) =>
-      event.checkedInIds.has(fencer.id) && all.findIndex((row) => row.id === fencer.id) === index
-  );
+  const kothFencers = event.participants.map((row) => ({
+    id: row.fencerId,
+    name: row.name,
+  }));
   const kothKingId = event.kothExits.find((row) => row.isKing)?.fencerId ?? null;
   const challengerIds = kothChallengerIds(event.kothExits);
   const kothChallengers = kothFencers.filter(
     (fencer) => challengerIds.has(fencer.id) || fencer.id === redFencerId
   );
-  const pickerFencers = kothBoard ? kothFencers : active;
+  const slotFencers = event.participants.map((row) => ({
+    id: row.fencerId,
+    name: row.name,
+  }));
+  const pickerFencers = kothBoard ? kothFencers : tournamentSlot ? slotFencers : active;
   const redPickerFencers = kothBoard ? kothChallengers : pickerFencers;
 
   const liveBlueName = fencerName(pickerFencers, blueFencerId, "Fencer 1");
@@ -545,7 +548,7 @@ const Index = ({ settings }: IndexProps) => {
   );
 };
 
-function fencerName(roster: Fencer[], id: string | null, fallback: string): string {
+function fencerName(roster: { id: string; name: string }[], id: string | null, fallback: string): string {
   if (!id) return fallback;
   return roster.find((fencer) => fencer.id === id)?.name ?? fallback;
 }

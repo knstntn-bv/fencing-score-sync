@@ -4,6 +4,7 @@ import type { TournamentBout, TournamentPointsScheme } from "@/types/tournament"
 export type StandingRow = {
   fencerId: string;
   name: string;
+  clubName: string | null;
   points: number;
   scored: number;
   received: number;
@@ -29,7 +30,7 @@ export function formatStandingPoints(points: number): string {
 }
 
 export function computeStandings(
-  people: { id: string; name: string }[],
+  people: { id: string; name: string; clubName?: string | null }[],
   bouts: TournamentBout[],
   scheme: TournamentPointsScheme
 ): StandingRow[] {
@@ -38,6 +39,7 @@ export function computeStandings(
     rows.set(person.id, {
       fencerId: person.id,
       name: person.name,
+      clubName: person.clubName ?? null,
       points: 0,
       scored: 0,
       received: 0,
