@@ -22,6 +22,27 @@ export type Database = {
         };
         Relationships: [];
       };
+      profiles: {
+        Row: {
+          user_id: string;
+          name: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          name: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          name?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       club_members: {
         Row: {
           club_id: string;
@@ -47,6 +68,7 @@ export type Database = {
         Row: {
           id: string;
           club_id: string;
+          user_id: string | null;
           name: string;
           archived_at: string | null;
           created_at: string;
@@ -55,6 +77,7 @@ export type Database = {
         Insert: {
           id?: string;
           club_id: string;
+          user_id?: string | null;
           name: string;
           archived_at?: string | null;
           created_at?: string;
@@ -63,6 +86,7 @@ export type Database = {
         Update: {
           id?: string;
           club_id?: string;
+          user_id?: string | null;
           name?: string;
           archived_at?: string | null;
           created_at?: string;
@@ -304,8 +328,12 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
-      ensure_own_club: {
-        Args: Record<PropertyKey, never>;
+      save_own_profile: {
+        Args: { p_name: string };
+        Returns: string;
+      };
+      create_own_club: {
+        Args: { p_name: string };
         Returns: string;
       };
       is_club_member: {

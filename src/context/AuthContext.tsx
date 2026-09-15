@@ -9,7 +9,12 @@ import {
   type ReactNode,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { resolveCurrentClubId } from "@/lib/clubs";
+import {
+  createOwnClub,
+  getOwnProfile,
+  resolveCurrentClubId,
+  saveOwnProfile,
+} from "@/lib/clubs";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 const GUEST_BOUT_KEY = "fencing-scorer:v1:guest-bout";
@@ -36,15 +41,18 @@ type AuthContextValue = {
   loading: boolean;
   session: Session | null;
   user: User | null;
+  profileName: string | null;
   clubId: string | null;
-  clubError: string | null;
-  retryClub: () => void;
+  accountError: string | null;
+  retryAccount: () => void;
   guestBout: boolean;
   enterGuestBout: () => void;
   exitGuestBout: () => void;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string) => Promise<{ error: string | null; needsEmailConfirmation: boolean }>;
   signOut: () => Promise<void>;
+  createClub: (name: string) => Promise<{ error: string | null }>;
+  completeSetup: (name: string, clubName: string | null) => Promise<{ error: string | null }>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -52,10 +60,11 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [sessionLoading, setSessionLoading] = useState(isSupabaseConfigured);
   const [session, setSession] = useState<Session | null>(null);
+  const [profileName, setProfileName] = useState<string | null>(null);
   const [clubId, setClubId] = useState<string | null>(null);
-  const [clubLoading, setClubLoading] = useState(false);
-  const [clubError, setClubError] = useState<string | null>(null);
-  const [clubEpoch, setClubEpoch] = useState(0);
+  const [accountLoading, setAccountLoading] = useState(false);
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [accountEpoch, setAccountEpoch] = useState(0);
   const [guestBout, setGuestBout] = useState(readGuestBout);
   const userIdRef = useRef<string | null>(null);
 
@@ -78,9 +87,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     if (userIdRef.current === nextUserId) return;
     userIdRef.current = nextUserId;
+    setProfileName(null);
     setClubId(null);
-    setClubError(null);
-    setClubLoading(Boolean(nextUserId));
+    setAccountError(null);
+    setAccountLoading(Boolean(nextUserId));
   }, []);
 
   useEffect(() => {
@@ -118,36 +128,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const userId = session?.user?.id;
     if (!userId) {
+      setProfileName(null);
       setClubId(null);
-      setClubError(null);
-      setClubLoading(false);
+      setAccountError(null);
+      setAccountLoading(false);
       return;
     }
 
     let cancelled = false;
-    setClubLoading(true);
-    setClubError(null);
+    setAccountLoading(true);
+    setAccountError(null);
 
-    resolveCurrentClubId()
-      .then((id) => {
+    Promise.all([getOwnProfile(), resolveCurrentClubId()])
+      .then(([profile, currentClubId]) => {
         if (cancelled) return;
-        setClubId(id);
-        setClubLoading(false);
+        setProfileName(profile?.name ?? null);
+        setClubId(currentClubId);
+        setAccountLoading(false);
       })
       .catch(() => {
         if (cancelled) return;
+        setProfileName(null);
         setClubId(null);
-        setClubError("Could not load data.");
-        setClubLoading(false);
+        setAccountError("Could not load data.");
+        setAccountLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [session?.user?.id, clubEpoch]);
+  }, [session?.user?.id, accountEpoch]);
 
-  const retryClub = useCallback(() => {
-    setClubEpoch((epoch) => epoch + 1);
+  const retryAccount = useCallback(() => {
+    setAccountEpoch((epoch) => epoch + 1);
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
@@ -175,8 +188,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   }, []);
 
-  const loading =
-    sessionLoading || Boolean(session?.user && (clubLoading || (!clubId && !clubError)));
+  const createClub = useCallback(async (name: string) => {
+    try {
+      const id = await createOwnClub(name);
+      setClubId(id);
+      return { error: null };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Could not create the club." };
+    }
+  }, []);
+
+  const completeSetup = useCallback(async (name: string, clubName: string | null) => {
+    try {
+      const saved = await saveOwnProfile(name);
+      const nextClubId = clubName ? await createOwnClub(clubName) : null;
+      setProfileName(saved);
+      if (nextClubId) setClubId(nextClubId);
+      return { error: null };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Could not finish setup." };
+    }
+  }, []);
+
+  const loading = sessionLoading || Boolean(session?.user && accountLoading);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -184,28 +218,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       session,
       user: session?.user ?? null,
+      profileName,
       clubId,
-      clubError,
-      retryClub,
+      accountError,
+      retryAccount,
       guestBout,
       enterGuestBout,
       exitGuestBout,
       signIn,
       signUp,
       signOut,
+      createClub,
+      completeSetup,
     }),
     [
       loading,
       session,
+      profileName,
       clubId,
-      clubError,
-      retryClub,
+      accountError,
+      retryAccount,
       guestBout,
       enterGuestBout,
       exitGuestBout,
       signIn,
       signUp,
       signOut,
+      createClub,
+      completeSetup,
     ]
   );
 

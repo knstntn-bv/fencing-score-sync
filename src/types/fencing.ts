@@ -4,6 +4,7 @@ export type BoutResult = "win" | "lose" | "draw";
 export type Fencer = {
   id: string;
   clubId: string;
+  userId: string | null;
   name: string;
   archivedAt: string | null;
   createdAt: string;

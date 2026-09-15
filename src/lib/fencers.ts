@@ -10,6 +10,7 @@ export function mapFencer(row: FencerRow): Fencer {
   return {
     id: row.id,
     clubId: row.club_id,
+    userId: row.user_id,
     name: row.name,
     archivedAt: row.archived_at,
     createdAt: row.created_at,
