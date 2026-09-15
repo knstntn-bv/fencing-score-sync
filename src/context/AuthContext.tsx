@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { createOwnClub, loadOwnAccountWithRetry, saveOwnProfile } from "@/lib/clubs";
+import { createOwnClub, loadOwnAccountWithRetry, renameOwnClub, saveOwnProfile, type ClubMemberRole } from "@/lib/clubs";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 const GUEST_BOUT_KEY = "fencing-scorer:v1:guest-bout";
@@ -38,6 +38,8 @@ type AuthContextValue = {
   user: User | null;
   profileName: string | null;
   clubId: string | null;
+  clubName: string | null;
+  clubRole: ClubMemberRole | null;
   accountError: string | null;
   retryAccount: () => void;
   guestBout: boolean;
@@ -46,7 +48,9 @@ type AuthContextValue = {
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string) => Promise<{ error: string | null; needsEmailConfirmation: boolean }>;
   signOut: () => Promise<void>;
+  saveProfile: (name: string) => Promise<{ error: string | null }>;
   createClub: (name: string) => Promise<{ error: string | null }>;
+  renameClub: (name: string) => Promise<{ error: string | null }>;
   completeSetup: (name: string, clubName: string | null) => Promise<{ error: string | null }>;
 };
 
@@ -57,6 +61,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profileName, setProfileName] = useState<string | null>(null);
   const [clubId, setClubId] = useState<string | null>(null);
+  const [clubName, setClubName] = useState<string | null>(null);
+  const [clubRole, setClubRole] = useState<ClubMemberRole | null>(null);
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [accountEpoch, setAccountEpoch] = useState(0);
@@ -84,6 +90,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     userIdRef.current = nextUserId;
     setProfileName(null);
     setClubId(null);
+    setClubName(null);
+    setClubRole(null);
     setAccountError(null);
     setAccountLoading(Boolean(nextUserId));
   }, []);
@@ -125,6 +133,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!userId) {
       setProfileName(null);
       setClubId(null);
+      setClubName(null);
+      setClubRole(null);
       setAccountError(null);
       setAccountLoading(false);
       return;
@@ -139,12 +149,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         setProfileName(account.profile?.name ?? null);
         setClubId(account.clubId);
+        setClubName(account.clubName);
+        setClubRole(account.clubRole);
         setAccountLoading(false);
       })
       .catch(() => {
         if (cancelled) return;
         setProfileName(null);
         setClubId(null);
+        setClubName(null);
+        setClubRole(null);
         setAccountError("Could not load data.");
         setAccountLoading(false);
       });
@@ -188,22 +202,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   }, []);
 
+  const saveProfile = useCallback(async (name: string) => {
+    try {
+      const saved = await saveOwnProfile(name);
+      setProfileName(saved);
+      return { error: null };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Could not save your name." };
+    }
+  }, []);
+
   const createClub = useCallback(async (name: string) => {
     try {
       const id = await createOwnClub(name);
       setClubId(id);
+      setClubRole("owner");
+      setClubName(name.trim().replace(/\s+/g, " "));
       return { error: null };
     } catch (error) {
       return { error: error instanceof Error ? error.message : "Could not create the club." };
     }
   }, []);
 
-  const completeSetup = useCallback(async (name: string, clubName: string | null) => {
+  const renameClub = useCallback(async (name: string) => {
+    try {
+      const saved = await renameOwnClub(name);
+      setClubName(saved);
+      return { error: null };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Could not rename the club." };
+    }
+  }, []);
+
+  const completeSetup = useCallback(async (name: string, nextClubName: string | null) => {
     try {
       const saved = await saveOwnProfile(name);
-      const nextClubId = clubName ? await createOwnClub(clubName) : null;
+      const nextClubId = nextClubName ? await createOwnClub(nextClubName) : null;
       setProfileName(saved);
-      if (nextClubId) setClubId(nextClubId);
+      if (nextClubId && nextClubName) {
+        setClubId(nextClubId);
+        setClubRole("owner");
+        setClubName(nextClubName.trim().replace(/\s+/g, " "));
+      }
       return { error: null };
     } catch (error) {
       return { error: error instanceof Error ? error.message : "Could not finish setup." };
@@ -220,6 +260,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: session?.user ?? null,
       profileName,
       clubId,
+      clubName,
+      clubRole,
       accountError,
       retryAccount,
       guestBout,
@@ -228,7 +270,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signUp,
       signOut,
+      saveProfile,
       createClub,
+      renameClub,
       completeSetup,
     }),
     [
@@ -236,6 +280,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       profileName,
       clubId,
+      clubName,
+      clubRole,
       accountError,
       retryAccount,
       guestBout,
@@ -244,7 +290,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signUp,
       signOut,
+      saveProfile,
       createClub,
+      renameClub,
       completeSetup,
     ]
   );

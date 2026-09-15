@@ -518,7 +518,7 @@ const Index = ({ settings }: IndexProps) => {
             </div>
           ) : signedInWithoutClub ? (
             <div className="text-sm text-muted-foreground">
-              Results are not saved until you create a club in Settings.
+              Results are not saved until you create a club in Account.
             </div>
           ) : selectionHint ? (
             <div className="text-sm text-destructive">{selectionHint}</div>

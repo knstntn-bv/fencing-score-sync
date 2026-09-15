@@ -118,7 +118,7 @@ export default function Onboarding() {
                   {busy === "skip" ? "Saving…" : "Skip"}
                 </Button>
                 <p className="text-xs text-muted-foreground text-center">
-                  Skip keeps your name and opens the scoreboard. You can create a club later in Settings.
+                  Skip keeps your name and opens the scoreboard. You can create a club later in Account.
                 </p>
               </>
             ) : (

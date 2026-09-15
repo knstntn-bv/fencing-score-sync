@@ -336,7 +336,15 @@ export type Database = {
         Args: { p_name: string };
         Returns: string;
       };
+      rename_own_club: {
+        Args: { p_name: string };
+        Returns: string;
+      };
       is_club_member: {
+        Args: { p_club_id: string };
+        Returns: boolean;
+      };
+      is_club_owner: {
         Args: { p_club_id: string };
         Returns: boolean;
       };
