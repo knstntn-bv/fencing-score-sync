@@ -359,11 +359,7 @@ create unique index fencers_club_active_name_unique
   on public.fencers (club_id, lower(trim(name)))
   where archived_at is null;
 
-create unique index fencers_club_user_unique
-  on public.fencers (club_id, user_id)
-  where user_id is not null;
-
-create index fencers_user_id_idx
+create unique index fencers_user_unique
   on public.fencers (user_id)
   where user_id is not null;
 
