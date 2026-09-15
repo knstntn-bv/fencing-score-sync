@@ -46,7 +46,7 @@
 
 - `clubs`, `club_members`, `profiles`, `fencers`, `matches`;
 - `tournaments`, `tournament_participants`, `tournament_bouts` — отдельно от клубных боёв, без турнирного outbox;
-- `club_id` — это `clubs.id`; пользователь связан через `club_members`;
+- `club_id` — это `clubs.id`; доступ — активный `fencers.user_id`;
 - в клиент только anon key.
 
 Схема: `supabase/final_schema.sql` и `supabase/README.md`.

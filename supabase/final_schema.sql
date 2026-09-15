@@ -71,9 +71,10 @@ set search_path = public
 as $$
   select exists (
     select 1
-    from public.club_members
+    from public.fencers
     where club_id = p_club_id
       and user_id = auth.uid()
+      and archived_at is null
   );
 $$;
 
@@ -86,10 +87,11 @@ set search_path = public
 as $$
   select exists (
     select 1
-    from public.club_members
+    from public.fencers
     where club_id = p_club_id
       and user_id = auth.uid()
       and role = 'owner'
+      and archived_at is null
   );
 $$;
 
@@ -269,9 +271,8 @@ begin
 
   select club_id
   into existing_club_id
-  from public.club_members
+  from public.fencers
   where user_id = auth.uid()
-  order by (role = 'owner') desc, created_at asc
   limit 1;
 
   if existing_club_id is not null then
@@ -324,10 +325,10 @@ begin
 
   select club_id
   into target_club_id
-  from public.club_members
+  from public.fencers
   where user_id = auth.uid()
     and role = 'owner'
-  order by created_at asc
+    and archived_at is null
   limit 1;
 
   if target_club_id is null then
@@ -367,6 +368,84 @@ create trigger fencers_set_updated_at
   before update on public.fencers
   for each row
   execute procedure public.set_updated_at();
+
+create or replace function public.fencers_freeze_link()
+returns trigger
+language plpgsql
+as $$
+begin
+  if current_setting('fencing.fencer_link', true) = '1' then
+    return new;
+  end if;
+  new.user_id := old.user_id;
+  new.role := old.role;
+  return new;
+end;
+$$;
+
+create trigger fencers_freeze_link
+  before update on public.fencers
+  for each row
+  execute procedure public.fencers_freeze_link();
+
+create or replace function public.fencers_protect_last_owner()
+returns trigger
+language plpgsql
+as $$
+declare
+  leaving boolean;
+begin
+  if tg_op = 'DELETE' then
+    if current_setting('fencing.deleting_club_id', true) = old.club_id::text then
+      return old;
+    end if;
+    leaving := old.role = 'owner' and old.user_id is not null and old.archived_at is null;
+    if leaving
+      and not exists (
+        select 1
+        from public.fencers
+        where club_id = old.club_id
+          and role = 'owner'
+          and user_id is not null
+          and archived_at is null
+          and id <> old.id
+      )
+    then
+      raise exception 'club % must keep at least one owner', old.club_id;
+    end if;
+    return old;
+  end if;
+
+  if current_setting('fencing.deleting_club_id', true) = new.club_id::text then
+    return new;
+  end if;
+
+  leaving :=
+    (old.role = 'owner' and old.user_id is not null and old.archived_at is null)
+    and not (new.role = 'owner' and new.user_id is not null and new.archived_at is null);
+
+  if leaving
+    and not exists (
+      select 1
+      from public.fencers
+      where club_id = old.club_id
+        and role = 'owner'
+        and user_id is not null
+        and archived_at is null
+        and id <> old.id
+    )
+  then
+    raise exception 'club % must keep at least one owner', old.club_id;
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger fencers_protect_last_owner
+  before delete or update of role, user_id, archived_at on public.fencers
+  for each row
+  execute procedure public.fencers_protect_last_owner();
 
 create table public.matches (
   id uuid primary key default gen_random_uuid(),
@@ -498,6 +577,8 @@ revoke all on function public.save_own_profile(text) from public;
 revoke all on function public.create_own_club(text) from public;
 revoke all on function public.rename_own_club(text) from public;
 revoke all on function public.profiles_assign_public_id() from public;
+revoke all on function public.fencers_freeze_link() from public;
+revoke all on function public.fencers_protect_last_owner() from public;
 grant execute on function public.is_club_member(uuid) to authenticated;
 grant execute on function public.is_club_owner(uuid) to authenticated;
 grant execute on function public.save_own_profile(text) to authenticated;
@@ -615,10 +696,10 @@ begin
     profile.name,
     (
       select club.name
-      from public.club_members as membership
-      join public.clubs as club on club.id = membership.club_id
-      where membership.user_id = profile.user_id
-      order by (membership.role = 'owner') desc, membership.created_at asc
+      from public.fencers as linked
+      join public.clubs as club on club.id = linked.club_id
+      where linked.user_id = profile.user_id
+        and linked.archived_at is null
       limit 1
     ) as club_name,
     (
