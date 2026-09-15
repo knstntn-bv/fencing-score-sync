@@ -11,6 +11,7 @@ export type ClubMembership = {
 
 export type Profile = {
   name: string;
+  publicId: string;
 };
 
 type ClubMemberRow = Pick<
@@ -72,9 +73,12 @@ export async function resolveCurrentClubId(): Promise<string | null> {
 }
 
 export async function getOwnProfile(): Promise<Profile | null> {
-  const { data, error } = await requireSupabase().from("profiles").select("name").maybeSingle();
+  const { data, error } = await requireSupabase()
+    .from("profiles")
+    .select("name, public_id")
+    .maybeSingle();
   if (error) throw error;
-  return data ? { name: data.name } : null;
+  return data ? { name: data.name, publicId: data.public_id } : null;
 }
 
 export async function saveOwnProfile(name: string): Promise<string> {

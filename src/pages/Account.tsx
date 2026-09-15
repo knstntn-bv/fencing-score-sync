@@ -16,6 +16,7 @@ export default function Account() {
     clubName,
     clubRole,
     profileName,
+    profilePublicId,
     saveProfile,
     createClub,
     renameClub,
@@ -127,7 +128,16 @@ export default function Account() {
                   : "Saved on your account. You join the roster with it if you create a club."}
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="account-public-id">ID</Label>
+                <Input
+                  id="account-public-id"
+                  value={profilePublicId ?? ""}
+                  readOnly
+                  className="bg-muted"
+                />
+              </div>
               <form onSubmit={(event) => void handleSaveName(event)} className="space-y-3">
                 <div className="space-y-2">
                   <Label htmlFor="account-display-name">Name</Label>

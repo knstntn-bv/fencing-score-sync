@@ -172,15 +172,45 @@ create trigger club_members_cleanup_empty_club
 create table public.profiles (
   user_id uuid primary key references auth.users (id) on delete cascade,
   name text not null,
+  public_id text not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint profiles_name_not_blank check (char_length(trim(name)) > 0)
+  constraint profiles_name_not_blank check (char_length(trim(name)) > 0),
+  constraint profiles_public_id_digits check (public_id ~ '^[0-9]+$'),
+  constraint profiles_public_id_unique unique (public_id)
 );
 
 create trigger profiles_set_updated_at
   before update on public.profiles
   for each row
   execute procedure public.set_updated_at();
+
+create or replace function public.profiles_assign_public_id()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op = 'UPDATE' then
+    new.public_id := old.public_id;
+    return new;
+  end if;
+
+  perform pg_advisory_xact_lock(871234002);
+
+  select (coalesce(max(public_id::bigint), 1000) + 1)::text
+  into new.public_id
+  from public.profiles;
+
+  return new;
+end;
+$$;
+
+create trigger profiles_assign_public_id
+  before insert or update on public.profiles
+  for each row
+  execute procedure public.profiles_assign_public_id();
 
 create or replace function public.save_own_profile(p_name text)
 returns text
@@ -469,6 +499,7 @@ revoke all on function public.is_club_owner(uuid) from public;
 revoke all on function public.save_own_profile(text) from public;
 revoke all on function public.create_own_club(text) from public;
 revoke all on function public.rename_own_club(text) from public;
+revoke all on function public.profiles_assign_public_id() from public;
 grant execute on function public.is_club_member(uuid) to authenticated;
 grant execute on function public.is_club_owner(uuid) to authenticated;
 grant execute on function public.save_own_profile(text) to authenticated;
