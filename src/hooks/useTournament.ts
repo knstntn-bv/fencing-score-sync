@@ -45,7 +45,9 @@ import {
   clearParticipantGroups,
   getTournament,
   listParticipants,
+  lookupCheckinByPublicId,
   normalizeClubName,
+  normalizePublicId,
   removeParticipant,
   renameTournament,
   tournamentErrorMessage,
@@ -137,6 +139,11 @@ export function useTournament(id: string | undefined) {
       if (!clubId) throw new Error("Not signed in.");
       const fencer = [...roster.active, ...roster.archived].find((row) => row.id === fencerId);
       if (!fencer) throw new Error("This fencer was not found.");
+      const existing = await listParticipants(id);
+      const already = existing.find(
+        (row) => row.fencerId === fencerId || (fencer.userId != null && row.fencerId === fencer.userId)
+      );
+      if (already) return already;
       const clubName = await getClubName(clubId);
       const row = await addParticipant({
         tournamentId: id,
@@ -164,6 +171,49 @@ export function useTournament(id: string | undefined) {
         clubId,
         name,
         clubName: input.clubName == null ? null : normalizeClubName(input.clubName),
+        isGuest: true,
+      });
+      await resetSetupDraw(id, queryClient.getQueryData<Tournament | null>([...TOURNAMENT_QUERY_KEY, id]));
+      return row;
+    },
+    onSuccess: invalidate,
+  });
+
+  const checkInById = useMutation({
+    mutationFn: async (publicId: string) => {
+      if (!id) throw new Error("Missing tournament.");
+      if (!clubId) throw new Error("Not signed in.");
+      if (!normalizePublicId(publicId)) throw new Error("Enter a valid ID.");
+      const found = await lookupCheckinByPublicId(publicId, clubId);
+      if (!found) throw new Error("No account with that ID.");
+      const existing = await listParticipants(id);
+      const rosterFencerId = found.fencerId;
+      const already = existing.find(
+        (row) =>
+          row.fencerId === found.userId || (rosterFencerId != null && row.fencerId === rosterFencerId)
+      );
+      if (already) throw new Error("Already checked in.");
+      if (rosterFencerId) {
+        const fencer =
+          [...roster.active, ...roster.archived].find((row) => row.id === rosterFencerId) ?? null;
+        const clubName = await getClubName(clubId);
+        const row = await addParticipant({
+          tournamentId: id,
+          fencerId: rosterFencerId,
+          clubId,
+          name: fencer?.name ?? found.name,
+          clubName,
+          isGuest: false,
+        });
+        await resetSetupDraw(id, queryClient.getQueryData<Tournament | null>([...TOURNAMENT_QUERY_KEY, id]));
+        return row;
+      }
+      const row = await addParticipant({
+        tournamentId: id,
+        fencerId: found.userId,
+        clubId,
+        name: found.name,
+        clubName: found.clubName,
         isGuest: true,
       });
       await resetSetupDraw(id, queryClient.getQueryData<Tournament | null>([...TOURNAMENT_QUERY_KEY, id]));
@@ -478,6 +528,7 @@ export function useTournament(id: string | undefined) {
     patch,
     checkIn,
     checkInGuest,
+    checkInById,
     checkOut,
     draw,
     startEvent,
