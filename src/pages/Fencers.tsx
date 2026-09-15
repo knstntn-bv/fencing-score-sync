@@ -21,10 +21,11 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/context/AuthContext";
 import { useFencers } from "@/hooks/useFencers";
+import { isLinkedFencer } from "@/lib/fencers";
 import type { Fencer } from "@/types/fencing";
 
 export default function FencersPage() {
-  const { configured } = useAuth();
+  const { configured, user, retryAccount } = useAuth();
   const fencers = useFencers();
   const [name, setName] = useState("");
   const [showArchived, setShowArchived] = useState(false);
@@ -100,8 +101,11 @@ export default function FencersPage() {
                 }}
                 onArchive={async () => {
                   try {
-                    await fencers.archive.mutateAsync(fencer.id);
-                    toast.success("Fencer archived");
+                    await fencers.archive.mutateAsync(fencer);
+                    toast.success(
+                      isLinkedFencer(fencer) ? "Account unlinked and archived" : "Fencer archived"
+                    );
+                    if (fencer.userId && fencer.userId === user?.id) retryAccount();
                   } catch (error) {
                     toast.error(fencers.mutationError(error));
                   }
@@ -240,23 +244,30 @@ function FencerRow({
     );
   }
 
+  const linked = isLinkedFencer(fencer);
+
   return (
     <Card>
       <CardContent className="p-4 flex items-center justify-between gap-3">
-        <p className="font-medium text-lg min-w-0 truncate">{fencer.name}</p>
+        <div className="min-w-0">
+          <p className="font-medium text-lg min-w-0 truncate">{fencer.name}</p>
+          {linked ? <p className="text-xs text-muted-foreground">Account</p> : null}
+        </div>
         <div className="flex flex-wrap justify-end gap-2">
           <FencerStatsButton fencer={fencer} />
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label={`Rename ${fencer.name}`}
-            onClick={() => {
-              setDraft(fencer.name);
-              setEditing(true);
-            }}
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
+          {linked ? null : (
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label={`Rename ${fencer.name}`}
+              onClick={() => {
+                setDraft(fencer.name);
+                setEditing(true);
+              }}
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          )}
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="outline" size="icon" aria-label={`Archive ${fencer.name}`}>
@@ -267,7 +278,9 @@ function FencerRow({
               <AlertDialogHeader>
                 <AlertDialogTitle>Archive {fencer.name}?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  They leave the roster but stay in bout history. You can restore them later.
+                  {linked
+                    ? "This unlinks their account and archives the roster row. Bout history stays. The last owner cannot be removed."
+                    : "They leave the roster but stay in bout history. You can restore them later."}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

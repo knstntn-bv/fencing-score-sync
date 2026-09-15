@@ -53,7 +53,7 @@ export function useFencers() {
   });
 
   const archive = useMutation({
-    mutationFn: (id: string) => archiveFencer(id),
+    mutationFn: (fencer: Fencer) => archiveFencer(fencer),
     onSuccess: invalidate,
   });
 
