@@ -56,8 +56,11 @@ finished_at        timestamptz null
 
 ```text
 tournament_id      uuid → tournaments.id on delete cascade
-fencer_id          uuid → fencers.id     -- без cascade delete фехтовальщика
-club_id            uuid
+fencer_id          uuid                  -- ростер: fencers.id; гость: uuid без строки в fencers
+club_id            uuid                  -- клуб-организатор, для RLS
+name               text not null         -- снимок на чек-ине
+club_name          text null             -- подпись в итогах
+is_guest           boolean
 pk                 (tournament_id, fencer_id)
 
 group_no           int null              -- 1..group_count после жеребьёвки групп
@@ -65,7 +68,7 @@ group_no           int null              -- 1..group_count после жереб
 
 Строка = человек в чек-ине. Пока `status = setup`, набор можно менять (insert/delete строк). После `live` набор заморожен.
 
-Имя для таблиц: живое из `fencers`, на сохранённом бое — снимок, как в клубе.
+Имя для таблиц: с участника (`name`); на сохранённом бое — снимок, как в клубе. `club_name` только на итоговом Table.
 
 ### tournament_bouts
 
@@ -174,7 +177,7 @@ Query табло:
 
 **status = setup**
 
-1. Чек-ин: список активных `fencers` клуба, отметить присутствующих. Гостя нет в списке → сначала `/fencers`. Мало людей / не степень двойки — тип плей-офф просто нельзя выбрать, не квота.
+1. Чек-ин: список активных `fencers` клуба, отметить присутствующих; отдельно — гость по имени (клуб необязателен). Мало людей / не степень двойки — тип плей-офф просто нельзя выбрать, не квота.
 2. Формат и параметры (когда чек-ин уже виден):
    - тип сетки;
    - схема баллов — ни одна не выбрана, обязательна для rr / groups / swiss;

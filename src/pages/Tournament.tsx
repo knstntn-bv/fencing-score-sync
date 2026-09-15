@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { format } from "date-fns";
-import { ArrowLeft, Trophy } from "lucide-react";
+import { ArrowLeft, Trophy, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { OverrideBoutDialog } from "@/components/OverrideBoutDialog";
 import { BoutScoreline } from "@/components/BoutScoreline";
@@ -57,9 +57,9 @@ import {
   TOURNAMENT_STATUS_LABEL,
   type TournamentBout,
   type TournamentFormat,
+  type TournamentParticipant,
   type TournamentPointsScheme,
 } from "@/types/tournament";
-import type { Fencer } from "@/types/fencing";
 import type { StandingRow } from "@/lib/tournament/standings";
 
 const SCHEMES: TournamentPointsScheme[] = ["half", "binary", "football"];
@@ -151,7 +151,13 @@ export default function TournamentPage() {
 
   const canEditCheckIn = event.status === "setup";
   const checkedCount = tournament.checkedInIds.size;
-  const fencerName = (fencerId: string | null) => nameFromRoster(tournament.roster, fencerId);
+  const fencerName = (fencerId: string | null) =>
+    nameFromParticipants(tournament.participants, fencerId);
+  const extraCheckedIn = tournament.participants.filter((row) => row.isGuest);
+  const checkInBusy =
+    tournament.checkIn.isPending ||
+    tournament.checkOut.isPending ||
+    tournament.checkInGuest.isPending;
 
   return (
     <TournamentShell
@@ -180,53 +186,98 @@ export default function TournamentPage() {
         <div>
           <h2 className="text-lg font-medium">Check-in</h2>
           <p className="text-sm text-muted-foreground">
-            Mark who is fencing today. The draw uses this list.
+            Mark who is fencing today. Guests are named here and stay off the club roster.
           </p>
         </div>
 
         {tournament.roster.isLoading ? (
           <p className="text-muted-foreground">Loading roster…</p>
-        ) : tournament.roster.active.length === 0 ? (
-          <p className="text-muted-foreground">
-            No fencers in the roster.{" "}
-            <Link to="/fencers" className="text-primary underline underline-offset-4">
-              Add names on Fencers
-            </Link>
-            , then check them in here.
-          </p>
         ) : (
-          <ul className="space-y-3">
-            {tournament.roster.active.map((fencer) => (
-              <li key={fencer.id}>
-                <CheckInRow
-                  fencer={fencer}
-                  checked={tournament.checkedInIds.has(fencer.id)}
-                  disabled={
-                    !canEditCheckIn || tournament.checkIn.isPending || tournament.checkOut.isPending
+          <div className="space-y-6">
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium text-muted-foreground">From roster</h3>
+              {tournament.roster.active.length === 0 ? (
+                <p className="text-muted-foreground">
+                  No fencers in the roster.{" "}
+                  <Link to="/fencers" className="text-primary underline underline-offset-4">
+                    Add names on Fencers
+                  </Link>
+                  , or add a guest below.
+                </p>
+              ) : (
+                <ul className="space-y-3">
+                  {tournament.roster.active.map((fencer) => (
+                    <li key={fencer.id}>
+                      <CheckInRow
+                        id={fencer.id}
+                        name={fencer.name}
+                        checked={tournament.checkedInIds.has(fencer.id)}
+                        disabled={!canEditCheckIn || checkInBusy}
+                        onToggle={async (checked) => {
+                          try {
+                            if (checked) await tournament.checkIn.mutateAsync(fencer.id);
+                            else await tournament.checkOut.mutateAsync(fencer.id);
+                          } catch (error) {
+                            toast.error(tournament.mutationError(error));
+                          }
+                        }}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {extraCheckedIn.length > 0 ? (
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium text-muted-foreground">Guests</h3>
+                <ul className="space-y-3">
+                  {extraCheckedIn.map((row) => (
+                    <li key={row.fencerId}>
+                      <CheckInRow
+                        id={row.fencerId}
+                        name={row.name}
+                        checked
+                        disabled={!canEditCheckIn || checkInBusy}
+                        onToggle={async (checked) => {
+                          if (checked) return;
+                          try {
+                            await tournament.checkOut.mutateAsync(row.fencerId);
+                          } catch (error) {
+                            toast.error(tournament.mutationError(error));
+                          }
+                        }}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {canEditCheckIn ? (
+              <GuestCheckInForm
+                saving={tournament.checkInGuest.isPending}
+                onAdd={async (input) => {
+                  try {
+                    await tournament.checkInGuest.mutateAsync(input);
+                    toast.success("Guest checked in");
+                  } catch (error) {
+                    toast.error(tournament.mutationError(error));
+                    throw error;
                   }
-                  onToggle={async (checked) => {
-                    try {
-                      if (checked) await tournament.checkIn.mutateAsync(fencer.id);
-                      else await tournament.checkOut.mutateAsync(fencer.id);
-                    } catch (error) {
-                      toast.error(tournament.mutationError(error));
-                    }
-                  }}
-                />
-              </li>
-            ))}
-          </ul>
+                }}
+              />
+            ) : null}
+          </div>
         )}
 
-        {canEditCheckIn && tournament.roster.active.length > 0 ? (
+        {canEditCheckIn ? (
           <p className="text-sm text-muted-foreground">
             {checkedCount < 2
               ? "Check in at least two fencers to continue."
               : `${checkedCount} checked in.`}
           </p>
-        ) : null}
-
-        {canEditCheckIn ? null : (
+        ) : (
           <p className="text-sm text-muted-foreground">Check-in is locked for this event.</p>
         )}
       </section>
@@ -254,6 +305,7 @@ export default function TournamentPage() {
               : undefined
           }
           fencerName={fencerName}
+          showClub={event.status === "done"}
           finishing={tournament.finishEvent.isPending}
           overridingId={
             tournament.overrideBout.isPending ? tournament.overrideBout.variables?.id : undefined
@@ -686,6 +738,7 @@ function ConductingPanel({
   cutoffTies,
   resolvingId,
   fencerName,
+  showClub,
   finishing,
   overridingId,
   onOverride,
@@ -705,6 +758,7 @@ function ConductingPanel({
   cutoffTies: CutoffTie[];
   resolvingId?: string;
   fencerName: (id: string | null) => string;
+  showClub: boolean;
   finishing: boolean;
   overridingId?: string;
   onOverride: (input: { id: string; blueScore: number; redScore: number }) => Promise<void>;
@@ -807,7 +861,7 @@ function ConductingPanel({
             kothTable.length === 0 ? (
               <p className="text-muted-foreground">Standings appear after bouts are saved.</p>
             ) : (
-              <KothStandingsList rows={kothTable} />
+              <KothStandingsList rows={kothTable} showClub={showClub} />
             )
           ) : format === "groups_playoff" ? (
             <>
@@ -830,6 +884,7 @@ function ConductingPanel({
                     ) : (
                       <StandingsList
                         rows={table.standings}
+                        showClub={showClub}
                         chooseIds={live && tie ? new Set(tie.candidates.map((row) => row.fencerId)) : undefined}
                         choosingId={resolvingId}
                         onChoose={
@@ -852,7 +907,7 @@ function ConductingPanel({
           ) : standings.length === 0 ? (
             <p className="text-muted-foreground">Standings appear after bouts are saved.</p>
           ) : (
-            <StandingsList rows={standings} />
+            <StandingsList rows={standings} showClub={showClub} />
           )}
         </TabsContent>
 
@@ -942,7 +997,13 @@ function KothQueue({
   );
 }
 
-function KothStandingsList({ rows }: { rows: KothStandingRow[] }) {
+function KothStandingsList({
+  rows,
+  showClub,
+}: {
+  rows: KothStandingRow[];
+  showClub: boolean;
+}) {
   return (
     <ul className="space-y-3">
       {rows.map((row) => (
@@ -951,6 +1012,9 @@ function KothStandingsList({ rows }: { rows: KothStandingRow[] }) {
             <CardContent className="p-4 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="font-medium truncate">{row.name}</p>
+                {showClub && row.clubName ? (
+                  <p className="text-sm text-muted-foreground truncate">{row.clubName}</p>
+                ) : null}
                 <p className="text-sm text-muted-foreground">
                   {row.wins} {row.wins === 1 ? "win" : "wins"} · best streak {row.bestStreak}
                 </p>
@@ -995,11 +1059,13 @@ function GroupQueueCard({
 
 function StandingsList({
   rows,
+  showClub,
   chooseIds,
   choosingId,
   onChoose,
 }: {
   rows: StandingRow[];
+  showClub?: boolean;
   chooseIds?: Set<string>;
   choosingId?: string;
   onChoose?: (fencerId: string) => void;
@@ -1014,6 +1080,9 @@ function StandingsList({
               <CardContent className="p-4 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-medium truncate">{row.name}</p>
+                  {showClub && row.clubName ? (
+                    <p className="text-sm text-muted-foreground truncate">{row.clubName}</p>
+                  ) : null}
                   <p className="text-sm text-muted-foreground">
                     {formatStandingPoints(row.points)} pts · {row.bouts}{" "}
                     {row.bouts === 1 ? "bout" : "bouts"}
@@ -1206,12 +1275,14 @@ function NameField({
 }
 
 function CheckInRow({
-  fencer,
+  id,
+  name,
   checked,
   disabled,
   onToggle,
 }: {
-  fencer: Fencer;
+  id: string;
+  name: string;
   checked: boolean;
   disabled: boolean;
   onToggle: (checked: boolean) => Promise<void>;
@@ -1219,31 +1290,86 @@ function CheckInRow({
   return (
     <Card>
       <CardContent className="p-4 flex items-center justify-between gap-3">
-        <label htmlFor={`check-in-${fencer.id}`} className="font-medium text-lg min-w-0 truncate">
-          {fencer.name}
+        <label htmlFor={`check-in-${id}`} className="font-medium text-lg min-w-0 truncate">
+          {name}
         </label>
         <Switch
-          id={`check-in-${fencer.id}`}
+          id={`check-in-${id}`}
           checked={checked}
           disabled={disabled}
           onCheckedChange={(next) => void onToggle(next)}
-          aria-label={`Check in ${fencer.name}`}
+          aria-label={`Check in ${name}`}
         />
       </CardContent>
     </Card>
   );
 }
 
-function nameFromRoster(
-  roster: { active: Fencer[]; archived: Fencer[] },
+function GuestCheckInForm({
+  saving,
+  onAdd,
+}: {
+  saving: boolean;
+  onAdd: (input: { name: string; clubName?: string }) => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [clubName, setClubName] = useState("");
+
+  const submit = async () => {
+    const nextName = name.trim();
+    if (!nextName || saving) return;
+    await onAdd({ name: nextName, clubName });
+    setName("");
+    setClubName("");
+  };
+
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit().catch(() => {
+          /* toast is handled by the caller */
+        });
+      }}
+    >
+      <h3 className="text-sm font-medium text-muted-foreground">Add guest</h3>
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex-1 space-y-2">
+          <Label htmlFor="guest-name">Name</Label>
+          <Input
+            id="guest-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Guest name"
+            autoComplete="off"
+          />
+        </div>
+        <div className="flex-1 space-y-2">
+          <Label htmlFor="guest-club">Club (optional)</Label>
+          <Input
+            id="guest-club"
+            value={clubName}
+            onChange={(event) => setClubName(event.target.value)}
+            placeholder="Club"
+            autoComplete="off"
+          />
+        </div>
+        <Button type="submit" className="sm:self-end" disabled={saving || !name.trim()}>
+          <UserPlus className="h-4 w-4 mr-2" />
+          Add guest
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function nameFromParticipants(
+  participants: TournamentParticipant[],
   fencerId: string | null
 ): string {
   if (!fencerId) return "TBD";
-  return (
-    roster.active.find((fencer) => fencer.id === fencerId)?.name ??
-    roster.archived.find((fencer) => fencer.id === fencerId)?.name ??
-    "Unknown"
-  );
+  return participants.find((row) => row.fencerId === fencerId)?.name ?? "Unknown";
 }
 
 function formatDuration(seconds: number): string {

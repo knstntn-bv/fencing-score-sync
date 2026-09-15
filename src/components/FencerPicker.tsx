@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import type { Fencer } from "@/types/fencing";
 import {
   Select,
   SelectContent,
@@ -10,8 +9,13 @@ import {
 
 export const ANONYMOUS_FENCER_VALUE = "anonymous";
 
+type FencerOption = {
+  id: string;
+  name: string;
+};
+
 type FencerPickerProps = {
-  fencers: Fencer[];
+  fencers: FencerOption[];
   value: string | null;
   excludeId?: string | null;
   disabled?: boolean;

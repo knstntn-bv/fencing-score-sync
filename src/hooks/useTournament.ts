@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import { useFencers } from "@/hooks/useFencers";
 import { TOURNAMENTS_QUERY_KEY } from "@/hooks/useTournaments";
+import { getClubName } from "@/lib/clubs";
+import { normalizeFencerName } from "@/lib/fencers";
 import { drawRoundRobin, expectedRoundRobinBoutCount } from "@/lib/tournament/roundRobin";
 import { expectedPlayoffBoutCount, isPlayoffSize, playoffReadyToStart } from "@/lib/tournament/playoff";
 import {
@@ -43,6 +45,7 @@ import {
   clearParticipantGroups,
   getTournament,
   listParticipants,
+  normalizeClubName,
   removeParticipant,
   renameTournament,
   tournamentErrorMessage,
@@ -132,13 +135,38 @@ export function useTournament(id: string | undefined) {
     mutationFn: async (fencerId: string) => {
       if (!id) throw new Error("Missing tournament.");
       if (!clubId) throw new Error("Not signed in.");
-      const row = await addParticipant({ tournamentId: id, fencerId, clubId });
-      const current = queryClient.getQueryData<Tournament | null>([...TOURNAMENT_QUERY_KEY, id]);
-      if (current?.status === "setup") {
-        await deleteTournamentBouts(id);
-        await clearParticipantGroups(id);
-        if (current.swissRounds != null) await updateTournament(id, { swissRounds: null });
-      }
+      const fencer = [...roster.active, ...roster.archived].find((row) => row.id === fencerId);
+      if (!fencer) throw new Error("This fencer was not found.");
+      const clubName = await getClubName(clubId);
+      const row = await addParticipant({
+        tournamentId: id,
+        fencerId,
+        clubId,
+        name: fencer.name,
+        clubName,
+        isGuest: false,
+      });
+      await resetSetupDraw(id, queryClient.getQueryData<Tournament | null>([...TOURNAMENT_QUERY_KEY, id]));
+      return row;
+    },
+    onSuccess: invalidate,
+  });
+
+  const checkInGuest = useMutation({
+    mutationFn: async (input: { name: string; clubName?: string }) => {
+      if (!id) throw new Error("Missing tournament.");
+      if (!clubId) throw new Error("Not signed in.");
+      const name = normalizeFencerName(input.name);
+      if (!name) throw new Error("Name is required.");
+      const row = await addParticipant({
+        tournamentId: id,
+        fencerId: crypto.randomUUID(),
+        clubId,
+        name,
+        clubName: input.clubName == null ? null : normalizeClubName(input.clubName),
+        isGuest: true,
+      });
+      await resetSetupDraw(id, queryClient.getQueryData<Tournament | null>([...TOURNAMENT_QUERY_KEY, id]));
       return row;
     },
     onSuccess: invalidate,
@@ -148,12 +176,7 @@ export function useTournament(id: string | undefined) {
     mutationFn: async (fencerId: string) => {
       if (!id) throw new Error("Missing tournament.");
       await removeParticipant(id, fencerId);
-      const current = queryClient.getQueryData<Tournament | null>([...TOURNAMENT_QUERY_KEY, id]);
-      if (current?.status === "setup") {
-        await deleteTournamentBouts(id);
-        await clearParticipantGroups(id);
-        if (current.swissRounds != null) await updateTournament(id, { swissRounds: null });
-      }
+      await resetSetupDraw(id, queryClient.getQueryData<Tournament | null>([...TOURNAMENT_QUERY_KEY, id]));
     },
     onSuccess: invalidate,
   });
@@ -334,10 +357,12 @@ export function useTournament(id: string | undefined) {
   const participants: TournamentParticipant[] = participantsQuery.data ?? [];
   const bouts: TournamentBout[] = boutsQuery.data ?? [];
   const checkedInIds = new Set(participants.map((row) => row.fencerId));
-  const people = participants.map((row) => {
-    const fencer = [...roster.active, ...roster.archived].find((item) => item.id === row.fencerId);
-    return { id: row.fencerId, name: fencer?.name ?? "Unknown", groupNo: row.groupNo };
-  });
+  const people = participants.map((row) => ({
+    id: row.fencerId,
+    name: row.name,
+    clubName: row.clubName,
+    groupNo: row.groupNo,
+  }));
   const event = tournamentQuery.data;
   const standings = event?.pointsScheme
     ? event.format === "swiss"
@@ -452,6 +477,7 @@ export function useTournament(id: string | undefined) {
     rename,
     patch,
     checkIn,
+    checkInGuest,
     checkOut,
     draw,
     startEvent,
@@ -462,6 +488,13 @@ export function useTournament(id: string | undefined) {
     syncSwiss: syncSwissRounds,
     mutationError: (error: unknown) => tournamentErrorMessage(error, "Request failed."),
   };
+}
+
+async function resetSetupDraw(id: string, current: Tournament | null | undefined): Promise<void> {
+  if (current?.status !== "setup") return;
+  await deleteTournamentBouts(id);
+  await clearParticipantGroups(id);
+  if (current.swissRounds != null) await updateTournament(id, { swissRounds: null });
 }
 
 export function useTournamentSlot(tournamentId: string | null, boutId: string | null) {
