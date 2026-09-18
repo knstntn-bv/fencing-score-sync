@@ -20,7 +20,7 @@ type ClubFencerRow = Pick<
 >;
 
 function mapMembership(row: ClubFencerRow): ClubMembership | null {
-  if (!row.role) return null;
+  if (!row.role || !row.club_id) return null;
   return {
     clubId: row.club_id,
     role: row.role,
@@ -58,6 +58,7 @@ export async function listOwnMemberships(): Promise<ClubMembership[]> {
     .select("club_id, role, created_at")
     .eq("user_id", userId)
     .is("archived_at", null)
+    .not("club_id", "is", null)
     .maybeSingle();
 
   if (error) throw error;

@@ -9,7 +9,7 @@ const CACHE_PREFIX = "fencing-scorer:v1:fencers:";
 export function mapFencer(row: FencerRow): Fencer {
   return {
     id: row.id,
-    clubId: row.club_id,
+    clubId: row.club_id as string,
     userId: row.user_id,
     role: row.role ?? null,
     name: row.name,

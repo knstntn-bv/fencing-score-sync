@@ -49,18 +49,21 @@ profiles
 ```text
 fencers
   id            uuid pk
-  club_id       uuid not null          -- → clubs.id
+  club_id       uuid null              -- → clubs.id; пусто = человек без клуба
   user_id       uuid null              -- → auth.users.id
-  role          owner | trainer | member | null  -- непусто, если есть user_id
+  role          owner | trainer | member | null  -- непусто, если есть клуб и user_id
   name          text not null
+  public_id     text null unique       -- цифры; только у аккаунта, копия profiles.public_id
   archived_at   timestamptz null       -- soft-delete: история не дырявится
   created_at    timestamptz
   updated_at    timestamptz
 ```
 
-Уникальность имени в клубе: `(club_id, lower(trim(name)))` среди неархивных. Пустые имена запрещены. `role` и `user_id` либо оба пустые, либо оба заданы. Непустой `user_id` уникален на всю таблицу (один профиль — один клуб, в том числе среди архива). Доступ в клуб: активная строка с `user_id` текущего пользователя (`is_club_member` / `is_club_owner`).
+Никнейм (без аккаунта): `club_id` обязателен, `user_id` / `role` / `public_id` пустые. Человек с аккаунтом: `user_id` и `public_id` обязательны; без клуба `club_id` и `role` пустые, в клубе оба заданы. Уникальность имени: `(club_id, lower(trim(name)))` среди неархивных **в клубе**. Пустые имена запрещены. Непустой `user_id` уникален на всю таблицу. Доступ в клуб: активная строка с `user_id` текущего пользователя и непустым `club_id` (`is_club_member` / `is_club_owner`). Удаление клуба снимает `club_id` с человека и удаляет никнеймы.
 
-Связать строку ростера с аккаунтом: `link_fencer_to_profile(fencer_id, public_id)` — ставит `user_id`, `role = member` и копирует имя из профиля (`fencing.fencer_link = 1`). Добавить нового человека по ID: `add_linked_fencer(public_id)` — вставляет строку в клуб вызывающего. Отвязать: `unlink_and_archive(fencer_id)` — `user_id` и `role` в null, архив. Последнего owner отвязать нельзя.
+`save_own_profile` пишет `profiles` и создаёт или обновляет person-строку (без клуба, если клуба ещё нет). `create_own_club` и `add_linked_fencer` вешают клуб на уже существующую строку, не вставляют второго бойца.
+
+Связать никнейм с аккаунтом, у которого ещё нет строки `fencers`: `link_fencer_to_profile`. Если person-строка уже есть, связь отклоняется (слияние — следующий этап). Отвязать: `unlink_and_archive` — `user_id`, `role` и `public_id` в null, архив. Последнего owner отвязать нельзя.
 
 Имя связанной строки правит только владелец профиля (`save_own_profile`). Прямой UPDATE имени или архива на связанной строке отклоняется. В UI карандаш скрыт; свободную строку привязывают по ID; Archive для связанного человека идёт через unlink.
 

@@ -39,9 +39,27 @@ create trigger clubs_set_updated_at
 create or replace function public.clubs_mark_deleting()
 returns trigger
 language plpgsql
+security definer
+set search_path = public
 as $$
 begin
   perform set_config('fencing.deleting_club_id', old.id::text, true);
+  perform set_config('fencing.fencer_link', '1', true);
+
+  delete from public.matches where club_id = old.id;
+  delete from public.tournaments where club_id = old.id;
+  delete from public.tournament_bouts where club_id = old.id;
+  delete from public.tournament_participants where club_id = old.id;
+  delete from public.fencers
+  where club_id = old.id
+    and user_id is null;
+
+  update public.fencers
+  set club_id = null,
+      role = null
+  where club_id = old.id
+    and user_id is not null;
+
   return old;
 end;
 $$;
@@ -53,28 +71,31 @@ create trigger clubs_mark_deleting
 
 create or replace function public.is_club_member(p_club_id uuid)
 returns boolean
-language sql
+language plpgsql
 stable
 security definer
 set search_path = public
 as $$
-  select exists (
+begin
+  return exists (
     select 1
     from public.fencers
     where club_id = p_club_id
       and user_id = auth.uid()
       and archived_at is null
   );
+end;
 $$;
 
 create or replace function public.is_club_owner(p_club_id uuid)
 returns boolean
-language sql
+language plpgsql
 stable
 security definer
 set search_path = public
 as $$
-  select exists (
+begin
+  return exists (
     select 1
     from public.fencers
     where club_id = p_club_id
@@ -82,6 +103,7 @@ as $$
       and role = 'owner'
       and archived_at is null
   );
+end;
 $$;
 
 create table public.profiles (
@@ -135,6 +157,7 @@ set search_path = public
 as $$
 declare
   normalized text;
+  profile_public_id text;
 begin
   if auth.uid() is null then
     raise exception 'Not authenticated';
@@ -145,17 +168,26 @@ begin
     raise exception 'Name is required';
   end if;
 
+  perform pg_advisory_xact_lock(871234001, hashtext(auth.uid()::text));
+
   insert into public.profiles (user_id, name)
   values (auth.uid(), normalized)
   on conflict (user_id) do update
-    set name = excluded.name;
+    set name = excluded.name
+  returning public_id into profile_public_id;
 
   perform set_config('fencing.fencer_link', '1', true);
 
   update public.fencers
-  set name = normalized
+  set name = normalized,
+      public_id = coalesce(public_id, profile_public_id)
   where user_id = auth.uid()
     and archived_at is null;
+
+  if not found then
+    insert into public.fencers (club_id, name, user_id, role, public_id)
+    values (null, normalized, auth.uid(), null, profile_public_id);
+  end if;
 
   return normalized;
 end;
@@ -170,6 +202,8 @@ as $$
 declare
   club_name text;
   profile_name text;
+  profile_public_id text;
+  existing_id uuid;
   existing_club_id uuid;
   new_club_id uuid;
 begin
@@ -184,8 +218,8 @@ begin
 
   perform pg_advisory_xact_lock(871234001, hashtext(auth.uid()::text));
 
-  select club_id
-  into existing_club_id
+  select id, club_id
+  into existing_id, existing_club_id
   from public.fencers
   where user_id = auth.uid()
   limit 1;
@@ -194,8 +228,8 @@ begin
     raise exception 'Already in a club';
   end if;
 
-  select name
-  into profile_name
+  select name, public_id
+  into profile_name, profile_public_id
   from public.profiles
   where user_id = auth.uid();
 
@@ -207,8 +241,20 @@ begin
   values (club_name)
   returning id into new_club_id;
 
-  insert into public.fencers (club_id, name, user_id, role)
-  values (new_club_id, profile_name, auth.uid(), 'owner');
+  perform set_config('fencing.fencer_link', '1', true);
+
+  if existing_id is not null then
+    update public.fencers
+    set club_id = new_club_id,
+        role = 'owner',
+        name = profile_name,
+        public_id = coalesce(public_id, profile_public_id),
+        archived_at = null
+    where id = existing_id;
+  else
+    insert into public.fencers (club_id, name, user_id, role, public_id)
+    values (new_club_id, profile_name, auth.uid(), 'owner', profile_public_id);
+  end if;
 
   return new_club_id;
 end;
@@ -257,24 +303,46 @@ $$;
 
 create table public.fencers (
   id uuid primary key default gen_random_uuid(),
-  club_id uuid not null references public.clubs (id) on delete cascade,
+  club_id uuid references public.clubs (id) on delete set null,
   user_id uuid references auth.users (id) on delete set null,
   role public.club_member_role,
   name text not null,
+  public_id text,
   archived_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint fencers_name_not_blank check (char_length(trim(name)) > 0),
-  constraint fencers_role_matches_user check ((user_id is null) = (role is null))
+  constraint fencers_public_id_digits check (public_id is null or public_id ~ '^[0-9]+$'),
+  constraint fencers_person_or_nickname check (
+    (
+      user_id is null
+      and role is null
+      and public_id is null
+      and club_id is not null
+    )
+    or
+    (
+      user_id is not null
+      and public_id is not null
+      and (
+        (club_id is null and role is null)
+        or (club_id is not null and role is not null)
+      )
+    )
+  )
 );
 
 create unique index fencers_club_active_name_unique
   on public.fencers (club_id, lower(trim(name)))
-  where archived_at is null;
+  where archived_at is null and club_id is not null;
 
 create unique index fencers_user_unique
   on public.fencers (user_id)
   where user_id is not null;
+
+create unique index fencers_public_id_unique
+  on public.fencers (public_id)
+  where public_id is not null;
 
 create trigger fencers_set_updated_at
   before update on public.fencers
@@ -292,6 +360,8 @@ begin
 
   new.user_id := old.user_id;
   new.role := old.role;
+  new.club_id := old.club_id;
+  new.public_id := old.public_id;
 
   if old.user_id is not null then
     if new.name is distinct from old.name then
@@ -319,7 +389,9 @@ declare
   leaving boolean;
 begin
   if tg_op = 'DELETE' then
-    if current_setting('fencing.deleting_club_id', true) = old.club_id::text then
+    if old.club_id is not null
+      and current_setting('fencing.deleting_club_id', true) = old.club_id::text
+    then
       return old;
     end if;
     leaving := old.role = 'owner' and old.user_id is not null and old.archived_at is null;
@@ -339,7 +411,9 @@ begin
     return old;
   end if;
 
-  if current_setting('fencing.deleting_club_id', true) = new.club_id::text then
+  if old.club_id is not null
+    and current_setting('fencing.deleting_club_id', true) = old.club_id::text
+  then
     return new;
   end if;
 
@@ -380,6 +454,7 @@ declare
   normalized text;
   profile_user uuid;
   profile_name text;
+  profile_public_id text;
   target public.fencers%rowtype;
   existing_fencer_id uuid;
 begin
@@ -401,7 +476,7 @@ begin
   from public.fencers
   where id = p_fencer_id;
 
-  if target.id is null or not public.is_club_member(target.club_id) then
+  if target.id is null or target.club_id is null or not public.is_club_member(target.club_id) then
     raise exception 'Fencer not found';
   end if;
 
@@ -413,8 +488,8 @@ begin
     raise exception 'Fencer is already linked';
   end if;
 
-  select user_id, name
-  into profile_user, profile_name
+  select user_id, name, public_id
+  into profile_user, profile_name, profile_public_id
   from public.profiles
   where public_id = normalized;
 
@@ -440,7 +515,8 @@ begin
   update public.fencers
   set user_id = profile_user,
       role = 'member',
-      name = profile_name
+      name = profile_name,
+      public_id = profile_public_id
   where id = p_fencer_id;
 
   return p_fencer_id;
@@ -469,7 +545,7 @@ begin
   from public.fencers
   where id = p_fencer_id;
 
-  if target.id is null or not public.is_club_member(target.club_id) then
+  if target.id is null or target.club_id is null or not public.is_club_member(target.club_id) then
     raise exception 'Fencer not found';
   end if;
 
@@ -485,6 +561,7 @@ begin
   update public.fencers
   set user_id = null,
       role = null,
+      public_id = null,
       archived_at = coalesce(archived_at, now())
   where id = p_fencer_id;
 
@@ -502,8 +579,9 @@ declare
   normalized text;
   profile_user uuid;
   profile_name text;
+  profile_public_id text;
   my_club uuid;
-  existing_fencer_id uuid;
+  existing public.fencers%rowtype;
   new_id uuid;
 begin
   if auth.uid() is null then
@@ -520,14 +598,15 @@ begin
   from public.fencers
   where user_id = auth.uid()
     and archived_at is null
+    and club_id is not null
   limit 1;
 
   if my_club is null then
     raise exception 'Not a club member';
   end if;
 
-  select user_id, name
-  into profile_user, profile_name
+  select user_id, name, public_id
+  into profile_user, profile_name, profile_public_id
   from public.profiles
   where public_id = normalized;
 
@@ -537,18 +616,31 @@ begin
 
   perform pg_advisory_xact_lock(871234001, hashtext(profile_user::text));
 
-  select id
-  into existing_fencer_id
+  select *
+  into existing
   from public.fencers
   where user_id = profile_user
   limit 1;
 
-  if existing_fencer_id is not null then
+  if existing.id is not null and existing.club_id is not null then
     raise exception 'Already in a club';
   end if;
 
-  insert into public.fencers (club_id, name, user_id, role)
-  values (my_club, profile_name, profile_user, 'member')
+  perform set_config('fencing.fencer_link', '1', true);
+
+  if existing.id is not null then
+    update public.fencers
+    set club_id = my_club,
+        role = 'member',
+        name = profile_name,
+        public_id = coalesce(public_id, profile_public_id),
+        archived_at = null
+    where id = existing.id;
+    return existing.id;
+  end if;
+
+  insert into public.fencers (club_id, name, user_id, role, public_id)
+  values (my_club, profile_name, profile_user, 'member', profile_public_id)
   returning id into new_id;
 
   return new_id;
@@ -637,6 +729,11 @@ create policy "fencers_select_member"
   on public.fencers for select
   to authenticated
   using (public.is_club_member(club_id));
+
+create policy "fencers_select_own"
+  on public.fencers for select
+  to authenticated
+  using (user_id = auth.uid());
 
 create policy "fencers_insert_member"
   on public.fencers for insert

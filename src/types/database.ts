@@ -49,30 +49,33 @@ export type Database = {
       fencers: {
         Row: {
           id: string;
-          club_id: string;
+          club_id: string | null;
           user_id: string | null;
           role: Database["public"]["Enums"]["club_member_role"] | null;
           name: string;
+          public_id: string | null;
           archived_at: string | null;
           created_at: string;
           updated_at: string;
         };
         Insert: {
           id?: string;
-          club_id: string;
+          club_id?: string | null;
           user_id?: string | null;
           role?: Database["public"]["Enums"]["club_member_role"] | null;
           name: string;
+          public_id?: string | null;
           archived_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
           id?: string;
-          club_id?: string;
+          club_id?: string | null;
           user_id?: string | null;
           role?: Database["public"]["Enums"]["club_member_role"] | null;
           name?: string;
+          public_id?: string | null;
           archived_at?: string | null;
           created_at?: string;
           updated_at?: string;
