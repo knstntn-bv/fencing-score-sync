@@ -1,8 +1,3 @@
--- F — eyeball merge collisions: nickname → account fencer (rewrite FKs, then DELETE).
--- SELECT-only. Run as postgres. One result set.
--- Same-club same-name is the strongest candidate; same-match / same-bout would break
--- distinct-fencer checks if those two ids were collapsed.
-
 (
   select
     'F_same_club_name'::text as check_id,

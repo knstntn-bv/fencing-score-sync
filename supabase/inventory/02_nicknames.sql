@@ -1,6 +1,3 @@
--- D — club-only nicknames (user_id is null) and history volume.
--- SELECT-only. Run as postgres. One result set.
-
 select
   f.id as fencer_id,
   f.club_id,

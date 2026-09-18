@@ -1,7 +1,3 @@
--- E — tournament_participants.fencer_id: roster fencers.id vs guest profiles.user_id.
--- SELECT-only. Run as postgres. One result set.
--- Add-by-ID without a club stores auth.users.id (profiles.user_id) and is_guest = true.
-
 select
   p.tournament_id,
   t.name as tournament_name,

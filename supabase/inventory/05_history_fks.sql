@@ -1,8 +1,3 @@
--- G — history FKs: matches and tournament_bouts vs current fencers / participants.
--- SELECT-only. Run as postgres. One result set.
--- matches.blue/red_fencer_id reference fencers.id (real FK).
--- tournament_bouts ids are not FKs to fencers; they must match tournament_participants.
-
 (
   select
     'G_match_club_mismatch'::text as check_id,

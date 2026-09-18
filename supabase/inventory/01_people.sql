@@ -1,6 +1,3 @@
--- A / A2 / B / C / H / J — named accounts vs fencers.
--- SELECT-only. Run as postgres. One result set.
-
 (
   select
     'A_profiles_without_fencers'::text as check_id,

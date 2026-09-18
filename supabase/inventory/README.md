@@ -6,6 +6,8 @@ Run in the **Supabase SQL Editor** as `postgres` (the editor default). That role
 
 The editor shows **one result set per run**. Start with `00_counts.sql`. If a `review` / `rewrite` count is non-zero, open the matching detail file.
 
+Paste the whole file and run it. Files start with SQL on line 1: if the cursor sits on a blank or comment line, the editor sends an empty query and Postgres answers `syntax error at end of input` / `LINE 0`. Select all (`Ctrl/Cmd+A`) before Run if that happens.
+
 | File | When to run |
 | --- | --- |
 | [`00_counts.sql`](./00_counts.sql) | Always. One row per check. |
