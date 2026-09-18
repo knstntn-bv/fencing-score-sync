@@ -1,8 +1,19 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, History as HistoryIcon, LogOut, Trophy, Users } from "lucide-react";
+import { ArrowLeft, DoorOpen, History as HistoryIcon, LogOut, Trophy, Users } from "lucide-react";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,6 +31,7 @@ export default function Account() {
     saveProfile,
     createClub,
     renameClub,
+    leaveClub,
     signOut,
   } = useAuth();
   const navigate = useNavigate();
@@ -37,6 +49,10 @@ export default function Account() {
   const [newClubName, setNewClubName] = useState("");
   const [creatingClub, setCreatingClub] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
 
   useEffect(() => {
     setDisplayName(profileName ?? "");
@@ -101,6 +117,20 @@ export default function Account() {
       setNewClubName("");
     }
     setCreatingClub(false);
+  };
+
+  const handleLeaveClub = async () => {
+    setLeaveError(null);
+    setLeaving(true);
+    const result = await leaveClub();
+    setLeaving(false);
+    if (result.error) {
+      setLeaveError(result.error);
+      return;
+    }
+    setLeaveOpen(false);
+    toast.success("Left the club");
+    await queryClient.invalidateQueries({ queryKey: ["fencers"] });
   };
 
   return (
@@ -245,6 +275,57 @@ export default function Account() {
                     History & stats
                   </Link>
                 </Button>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {clubId ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Leave club</CardTitle>
+                <CardDescription>
+                  You leave the roster. Your id and bout history stay. The last
+                  owner cannot leave.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {leaveError ? <p className="text-sm text-destructive">{leaveError}</p> : null}
+                <AlertDialog
+                  open={leaveOpen}
+                  onOpenChange={(open) => {
+                    setLeaveOpen(open);
+                    if (!open) setLeaveError(null);
+                  }}
+                >
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" className="w-full" disabled={leaving}>
+                      <DoorOpen className="h-4 w-4 mr-2" />
+                      Leave {clubName ?? "club"}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Leave {clubName ?? "this club"}?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        You leave the roster. Your id and bout history stay. You can
+                        create a new club afterwards. The last owner cannot leave.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    {leaveError ? <p className="text-sm text-destructive">{leaveError}</p> : null}
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={leaving}>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        disabled={leaving}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          void handleLeaveClub();
+                        }}
+                      >
+                        {leaving ? "Leaving…" : "Leave club"}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </CardContent>
             </Card>
           ) : null}

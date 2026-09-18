@@ -37,7 +37,7 @@ function rpcErrorMessage(message: string): string | null {
     return "This name is set in Account.";
   }
   if (message.includes("linked fencer must be unlinked to archive")) {
-    return "Unlink this account to archive it.";
+    return "Remove this account from the club instead of archiving.";
   }
   if (message.includes("must keep at least one owner")) {
     return "The club must keep at least one owner.";
@@ -177,7 +177,7 @@ export async function unlinkAndArchive(id: string): Promise<string> {
     p_fencer_id: id,
   });
   if (error) throw error;
-  if (!data) throw new Error("Could not unlink this account.");
+  if (!data) throw new Error("Could not remove this account from the club.");
   return data;
 }
 

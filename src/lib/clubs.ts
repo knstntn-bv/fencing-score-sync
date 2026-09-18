@@ -40,6 +40,12 @@ function mapRpcError(error: unknown, fallback: string): Error {
     if (message.includes("Only the owner can rename the club")) {
       return new Error("Only the club owner can change the club name.");
     }
+    if (message.includes("must keep at least one owner")) {
+      return new Error("The club must keep at least one owner.");
+    }
+    if (message.includes("Not a club member")) {
+      return new Error("You need to be in a club.");
+    }
     if (message) return new Error(message);
   }
   if (error instanceof Error && error.message) return error;
@@ -111,6 +117,13 @@ export async function renameOwnClub(name: string): Promise<string> {
   const { data, error } = await requireSupabase().rpc("rename_own_club", { p_name: name });
   if (error) throw mapRpcError(error, "Could not rename the club.");
   if (!data) throw new Error("Could not rename the club.");
+  return data;
+}
+
+export async function leaveOwnClub(): Promise<string> {
+  const { data, error } = await requireSupabase().rpc("leave_own_club");
+  if (error) throw mapRpcError(error, "Could not leave the club.");
+  if (!data) throw new Error("Could not leave the club.");
   return data;
 }
 
