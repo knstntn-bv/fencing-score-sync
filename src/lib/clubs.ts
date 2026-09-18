@@ -91,12 +91,20 @@ export async function resolveCurrentClubId(): Promise<string | null> {
 }
 
 export async function getOwnProfile(): Promise<Profile | null> {
-  const { data, error } = await requireSupabase()
-    .from("profiles")
+  const supabase = requireSupabase();
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+  const userId = sessionData.session?.user?.id;
+  if (!userId) return null;
+
+  const { data, error } = await supabase
+    .from("fencers")
     .select("name, public_id")
+    .eq("user_id", userId)
     .maybeSingle();
   if (error) throw error;
-  return data ? { name: data.name, publicId: data.public_id } : null;
+  if (!data?.name || !data.public_id) return null;
+  return { name: data.name, publicId: data.public_id };
 }
 
 export async function saveOwnProfile(name: string): Promise<string> {
