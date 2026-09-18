@@ -9,7 +9,7 @@ export type ClubMembership = {
   createdAt: string;
 };
 
-export type Profile = {
+export type Person = {
   name: string;
   publicId: string;
 };
@@ -36,7 +36,6 @@ function mapRpcError(error: unknown, fallback: string): Error {
     if (message.includes("Already in a club")) return new Error("You already belong to a club.");
     if (message.includes("Club name is required")) return new Error("Enter a club name.");
     if (message.includes("Name is required")) return new Error("Enter your name.");
-    if (message.includes("Profile name is required")) return new Error("Enter your name first.");
     if (message.includes("Only the owner can rename the club")) {
       return new Error("Only the club owner can change the club name.");
     }
@@ -90,7 +89,7 @@ export async function resolveCurrentClubId(): Promise<string | null> {
   return pickCurrentClubId(await listOwnMemberships());
 }
 
-export async function getOwnProfile(): Promise<Profile | null> {
+export async function getOwnPerson(): Promise<Person | null> {
   const supabase = requireSupabase();
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) throw sessionError;
@@ -107,8 +106,8 @@ export async function getOwnProfile(): Promise<Profile | null> {
   return { name: data.name, publicId: data.public_id };
 }
 
-export async function saveOwnProfile(name: string): Promise<string> {
-  const { data, error } = await requireSupabase().rpc("save_own_profile", { p_name: name });
+export async function saveOwnName(name: string): Promise<string> {
+  const { data, error } = await requireSupabase().rpc("save_own_name", { p_name: name });
   if (error) throw mapRpcError(error, "Could not save your name.");
   if (!data) throw new Error("Could not save your name.");
   return data;
@@ -146,8 +145,13 @@ export async function getClubName(clubId: string): Promise<string> {
   return data.name;
 }
 
+type OwnFencerRow = Pick<
+  Database["public"]["Tables"]["fencers"]["Row"],
+  "name" | "public_id" | "club_id" | "role" | "created_at" | "archived_at"
+>;
+
 export type OwnAccount = {
-  profile: Profile | null;
+  person: Person | null;
   clubId: string | null;
   clubRole: ClubMemberRole | null;
   clubName: string | null;
@@ -159,13 +163,32 @@ function wait(ms: number): Promise<void> {
   });
 }
 
+function mapPerson(row: OwnFencerRow): Person | null {
+  if (!row.name || !row.public_id) return null;
+  return { name: row.name, publicId: row.public_id };
+}
+
 export async function loadOwnAccount(): Promise<OwnAccount> {
-  await requireSupabase().auth.getSession();
-  const [profile, memberships] = await Promise.all([getOwnProfile(), listOwnMemberships()]);
-  const membership = pickCurrentMembership(memberships);
+  const supabase = requireSupabase();
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+  const userId = sessionData.session?.user?.id;
+  if (!userId) {
+    return { person: null, clubId: null, clubRole: null, clubName: null };
+  }
+
+  const { data, error } = await supabase
+    .from("fencers")
+    .select("name, public_id, club_id, role, created_at, archived_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+
+  const person = data ? mapPerson(data) : null;
+  const membership = data && data.archived_at === null ? mapMembership(data) : null;
   const clubName = membership ? await getClubName(membership.clubId) : null;
   return {
-    profile,
+    person,
     clubId: membership?.clubId ?? null,
     clubRole: membership?.role ?? null,
     clubName,

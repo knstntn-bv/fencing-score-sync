@@ -33,7 +33,7 @@ export function uniqueNameErrorMessage(error: { code?: string; message?: string;
 }
 
 function rpcErrorMessage(message: string): string | null {
-  if (message.includes("linked fencer name can only be changed from the profile")) {
+  if (message.includes("linked fencer name can only be changed from the account")) {
     return "This name is set in Account.";
   }
   if (message.includes("linked fencer must be unlinked to archive")) {
@@ -66,7 +66,7 @@ function rpcErrorMessage(message: string): string | null {
   if (message.includes("Fencer is archived")) {
     return "Restore this fencer before linking an account.";
   }
-  if (message.includes("Profile not found")) {
+  if (message.includes("Account not found")) {
     return "No account has that ID.";
   }
   if (message.includes("Fencer not found")) {
@@ -165,8 +165,8 @@ export async function renameFencer(id: string, name: string): Promise<Fencer> {
   return mapFencer(data);
 }
 
-export async function linkFencerToProfile(fencerId: string, publicId: string): Promise<string> {
-  const { data, error } = await requireSupabase().rpc("link_fencer_to_profile", {
+export async function mergeNicknameIntoPerson(fencerId: string, publicId: string): Promise<string> {
+  const { data, error } = await requireSupabase().rpc("merge_nickname_into_person", {
     p_fencer_id: fencerId,
     p_public_id: publicId,
   });
@@ -184,8 +184,8 @@ export async function addLinkedFencer(publicId: string): Promise<string> {
   return data;
 }
 
-export async function unlinkAndArchive(id: string): Promise<string> {
-  const { data, error } = await requireSupabase().rpc("unlink_and_archive", {
+export async function detachFromClub(id: string): Promise<string> {
+  const { data, error } = await requireSupabase().rpc("detach_from_club", {
     p_fencer_id: id,
   });
   if (error) throw error;
@@ -195,7 +195,7 @@ export async function unlinkAndArchive(id: string): Promise<string> {
 
 export async function archiveFencer(fencer: Pick<Fencer, "id" | "userId">): Promise<void> {
   if (fencer.userId) {
-    await unlinkAndArchive(fencer.id);
+    await detachFromClub(fencer.id);
     return;
   }
 

@@ -26,9 +26,9 @@ export default function Account() {
     clubId,
     clubName,
     clubRole,
-    profileName,
-    profilePublicId,
-    saveProfile,
+    personName,
+    personPublicId,
+    saveName,
     createClub,
     renameClub,
     leaveClub,
@@ -38,7 +38,7 @@ export default function Account() {
   const queryClient = useQueryClient();
   const isOwner = clubRole === "owner";
 
-  const [displayName, setDisplayName] = useState(profileName ?? "");
+  const [displayName, setDisplayName] = useState(personName ?? "");
   const [nameBusy, setNameBusy] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
 
@@ -55,8 +55,8 @@ export default function Account() {
   const [leaveError, setLeaveError] = useState<string | null>(null);
 
   useEffect(() => {
-    setDisplayName(profileName ?? "");
-  }, [profileName]);
+    setDisplayName(personName ?? "");
+  }, [personName]);
 
   useEffect(() => {
     setClubNameDraft(clubName ?? "");
@@ -74,7 +74,7 @@ export default function Account() {
       return;
     }
     setNameBusy(true);
-    const result = await saveProfile(displayName.trim());
+    const result = await saveName(displayName.trim());
     if (result.error) {
       setNameError(result.error);
     } else {
@@ -163,7 +163,7 @@ export default function Account() {
                 <Label htmlFor="account-public-id">ID</Label>
                 <Input
                   id="account-public-id"
-                  value={profilePublicId ?? ""}
+                  value={personPublicId ?? ""}
                   readOnly
                   className="bg-muted"
                 />
@@ -227,7 +227,7 @@ export default function Account() {
                 <CardTitle>Create a club</CardTitle>
                 <CardDescription>
                   You join the roster as owner using your name
-                  {profileName ? ` (${profileName})` : ""}. Roster, history, and
+                  {personName ? ` (${personName})` : ""}. Roster, history, and
                   tournaments stay locked until then.
                 </CardDescription>
               </CardHeader>

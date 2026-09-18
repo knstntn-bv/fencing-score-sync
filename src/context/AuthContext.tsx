@@ -11,11 +11,11 @@ import {
 import type { Session, User } from "@supabase/supabase-js";
 import {
   createOwnClub,
-  getOwnProfile,
+  getOwnPerson,
   leaveOwnClub,
   loadOwnAccountWithRetry,
   renameOwnClub,
-  saveOwnProfile,
+  saveOwnName,
   type ClubMemberRole,
 } from "@/lib/clubs";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
@@ -44,8 +44,8 @@ type AuthContextValue = {
   loading: boolean;
   session: Session | null;
   user: User | null;
-  profileName: string | null;
-  profilePublicId: string | null;
+  personName: string | null;
+  personPublicId: string | null;
   clubId: string | null;
   clubName: string | null;
   clubRole: ClubMemberRole | null;
@@ -57,7 +57,7 @@ type AuthContextValue = {
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string) => Promise<{ error: string | null; needsEmailConfirmation: boolean }>;
   signOut: () => Promise<void>;
-  saveProfile: (name: string) => Promise<{ error: string | null }>;
+  saveName: (name: string) => Promise<{ error: string | null }>;
   createClub: (name: string) => Promise<{ error: string | null }>;
   renameClub: (name: string) => Promise<{ error: string | null }>;
   leaveClub: () => Promise<{ error: string | null }>;
@@ -69,8 +69,8 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [sessionLoading, setSessionLoading] = useState(isSupabaseConfigured);
   const [session, setSession] = useState<Session | null>(null);
-  const [profileName, setProfileName] = useState<string | null>(null);
-  const [profilePublicId, setProfilePublicId] = useState<string | null>(null);
+  const [personName, setPersonName] = useState<string | null>(null);
+  const [personPublicId, setPersonPublicId] = useState<string | null>(null);
   const [clubId, setClubId] = useState<string | null>(null);
   const [clubName, setClubName] = useState<string | null>(null);
   const [clubRole, setClubRole] = useState<ClubMemberRole | null>(null);
@@ -99,8 +99,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     if (userIdRef.current === nextUserId) return;
     userIdRef.current = nextUserId;
-    setProfileName(null);
-    setProfilePublicId(null);
+    setPersonName(null);
+    setPersonPublicId(null);
     setClubId(null);
     setClubName(null);
     setClubRole(null);
@@ -143,8 +143,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const userId = session?.user?.id;
     if (!userId) {
-      setProfileName(null);
-      setProfilePublicId(null);
+      setPersonName(null);
+      setPersonPublicId(null);
       setClubId(null);
       setClubName(null);
       setClubRole(null);
@@ -160,8 +160,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadOwnAccountWithRetry()
       .then((account) => {
         if (cancelled) return;
-        setProfileName(account.profile?.name ?? null);
-        setProfilePublicId(account.profile?.publicId ?? null);
+        setPersonName(account.person?.name ?? null);
+        setPersonPublicId(account.person?.publicId ?? null);
         setClubId(account.clubId);
         setClubName(account.clubName);
         setClubRole(account.clubRole);
@@ -169,8 +169,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => {
         if (cancelled) return;
-        setProfileName(null);
-        setProfilePublicId(null);
+        setPersonName(null);
+        setPersonPublicId(null);
         setClubId(null);
         setClubName(null);
         setClubRole(null);
@@ -217,12 +217,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   }, []);
 
-  const saveProfile = useCallback(async (name: string) => {
+  const saveName = useCallback(async (name: string) => {
     try {
-      const saved = await saveOwnProfile(name);
-      setProfileName(saved);
-      const profile = await getOwnProfile();
-      setProfilePublicId(profile?.publicId ?? null);
+      const saved = await saveOwnName(name);
+      setPersonName(saved);
+      const person = await getOwnPerson();
+      setPersonPublicId(person?.publicId ?? null);
       return { error: null };
     } catch (error) {
       return { error: error instanceof Error ? error.message : "Could not save your name." };
@@ -265,11 +265,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const completeSetup = useCallback(async (name: string, nextClubName: string | null) => {
     try {
-      const saved = await saveOwnProfile(name);
+      const saved = await saveOwnName(name);
       const nextClubId = nextClubName ? await createOwnClub(nextClubName) : null;
-      setProfileName(saved);
-      const profile = await getOwnProfile();
-      setProfilePublicId(profile?.publicId ?? null);
+      setPersonName(saved);
+      const person = await getOwnPerson();
+      setPersonPublicId(person?.publicId ?? null);
       if (nextClubId && nextClubName) {
         setClubId(nextClubId);
         setClubRole("owner");
@@ -289,8 +289,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       session,
       user: session?.user ?? null,
-      profileName,
-      profilePublicId,
+      personName,
+      personPublicId,
       clubId,
       clubName,
       clubRole,
@@ -302,7 +302,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signUp,
       signOut,
-      saveProfile,
+      saveName,
       createClub,
       renameClub,
       leaveClub,
@@ -311,8 +311,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       loading,
       session,
-      profileName,
-      profilePublicId,
+      personName,
+      personPublicId,
       clubId,
       clubName,
       clubRole,
@@ -324,7 +324,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signUp,
       signOut,
-      saveProfile,
+      saveName,
       createClub,
       renameClub,
       leaveClub,
