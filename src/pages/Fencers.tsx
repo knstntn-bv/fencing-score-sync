@@ -464,7 +464,7 @@ function LinkAccountDialog({
             <DialogTitle>{mode === "attach" ? `Link ${fencer?.name ?? "fencer"}` : "Add by ID"}</DialogTitle>
             <DialogDescription>
               {mode === "attach"
-                ? "Use the number from their Account. This roster name will take the account name."
+                ? "Use the number from their Account. This roster name is replaced by the account. Bout history moves to the account id. This cannot be undone."
                 : "Use the number from their Account. They join the roster with that name. If they already have a roster name, link that row instead."}
             </DialogDescription>
           </DialogHeader>
@@ -494,8 +494,8 @@ function LinkAccountDialog({
                 ) : mode === "attach" ? (
                   <p className="text-sm text-muted-foreground">
                     {fencer && fencer.name !== preview.name
-                      ? `${fencer.name} will become ${preview.name}.`
-                      : "This roster name will be linked to the account."}
+                      ? `${fencer.name} will be replaced by ${preview.name}. Bout history stays on the account.`
+                      : "This roster name will be replaced by the account. Bout history stays on the account."}
                   </p>
                 ) : (
                   <p className="text-sm text-muted-foreground">Will be added to the roster.</p>

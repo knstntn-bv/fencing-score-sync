@@ -42,8 +42,20 @@ function rpcErrorMessage(message: string): string | null {
   if (message.includes("must keep at least one owner")) {
     return "The club must keep at least one owner.";
   }
+  if (message.includes("Already on this roster")) {
+    return "That account is already on this roster.";
+  }
   if (message.includes("Already in a club")) {
     return "That account already belongs to a club.";
+  }
+  if (message.includes("appear in the same bout")) {
+    return "Cannot link: they already appear in the same bout.";
+  }
+  if (message.includes("both in the same tournament")) {
+    return "Cannot link: they are both in the same tournament.";
+  }
+  if (message.includes("A fencer with this name already exists")) {
+    return "A fencer with this name already exists.";
   }
   if (message.includes("Fencer is already linked")) {
     return "This fencer is already linked to an account.";
