@@ -6,6 +6,8 @@ Tenant is `clubs`; access is an active `fencers.user_id`. Display names and digi
 
 Do not also replay `migrations/` on a database that was created from `final_schema.sql`.
 
+Person-fencers step 0: SELECT-only inventory in [`inventory/`](./inventory/) (not a migration).
+
 ## Existing project
 
 If the project already applied older SQL, run only the new files in `migrations/` that have not been applied yet (in timestamp order). Then update `final_schema.sql` so it still matches live Postgres.
