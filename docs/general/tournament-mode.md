@@ -81,7 +81,7 @@ tournaments
   created_at, updated_at, live_at, finished_at
 
 tournament_participants
-  pk (tournament_id, fencer_id)   -- у гостя fencer_id не ссылается на fencers
+  pk (tournament_id, fencer_id)   -- ростер: fencers.id клуба; гость-аккаунт: его person fencers.id; гость с именем: случайный uuid
   club_id                         -- клуб-организатор, для RLS
   name                            -- снимок на чек-ине
   club_name                       -- подпись в итогах; у ростера clubs.name, у гостя необязательно
@@ -99,7 +99,7 @@ tournament_bouts
   koth_king_id            -- только stage=koth; без FK на fencers (гость тоже может быть царём)
 ```
 
-RLS на всех трёх таблицах: SELECT / INSERT / UPDATE / DELETE при `is_club_member(club_id)`. Участник из ростера должен быть `fencers` этого клуба; гость — `is_guest` и uuid, которого нет в `fencers` (свободный боец — новый uuid; аккаунт не из ростера — `auth.users.id`). Чек-ин по ID: `lookup_checkin_by_public_id(public_id, club_id)` (security definer). Если у профиля есть активная строка в ростере этого клуба, в участники идёт её `fencers.id`. Бойцы слота — участники этого турнира.
+RLS на всех трёх таблицах: SELECT / INSERT / UPDATE / DELETE при `is_club_member(club_id)`. Участник из ростера должен быть `fencers` этого клуба; гость — `is_guest` и либо uuid, которого нет в `fencers` (имя на чек-ине), либо постоянный `fencers.id` аккаунта не из этого клуба. Чек-ин по ID: `lookup_checkin_by_public_id(public_id, club_id)` (security definer) всегда отдаёт person `fencers.id` и флаг `in_host_club`. Если человек в ростере клуба-организатора, в участники идёт этот id с `is_guest = false`; иначе тот же id с `is_guest = true`. Бойцы слота — участники этого турнира.
 
 Турнирные бои **никогда** не пишутся в `matches`. Агрегаты `/history` и `/stats` читают только `matches`.
 

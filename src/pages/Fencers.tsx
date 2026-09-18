@@ -395,7 +395,7 @@ function LinkAccountDialog({
   }, [open]);
 
   const blockedReason = preview
-    ? preview.fencerId
+    ? preview.inHostClub
       ? "That account is already on this roster."
       : preview.clubName
         ? `That account already belongs to ${preview.clubName}.`

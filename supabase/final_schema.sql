@@ -865,12 +865,49 @@ create table public.tournament_participants (
 create index tournament_participants_club_id_idx
   on public.tournament_participants (club_id);
 
+create or replace function public.tournament_participant_fencer_ok(
+  p_fencer_id uuid,
+  p_club_id uuid,
+  p_is_guest boolean
+)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if p_is_guest then
+    return
+      not exists (
+        select 1 from public.fencers as fencer where fencer.id = p_fencer_id
+      )
+      or exists (
+        select 1
+        from public.fencers as fencer
+        where fencer.id = p_fencer_id
+          and fencer.user_id is not null
+          and fencer.archived_at is null
+          and fencer.club_id is distinct from p_club_id
+      );
+  end if;
+
+  return exists (
+    select 1
+    from public.fencers as fencer
+    where fencer.id = p_fencer_id
+      and fencer.club_id = p_club_id
+  );
+end;
+$$;
+
 create or replace function public.lookup_checkin_by_public_id(p_public_id text, p_club_id uuid)
 returns table (
   user_id uuid,
   name text,
   club_name text,
-  fencer_id uuid
+  fencer_id uuid,
+  in_host_club boolean
 )
 language plpgsql
 stable
@@ -903,16 +940,22 @@ begin
       join public.clubs as club on club.id = linked.club_id
       where linked.user_id = profile.user_id
         and linked.archived_at is null
+        and linked.club_id is not null
       limit 1
     ) as club_name,
     (
-      select fencer.id
-      from public.fencers as fencer
-      where fencer.user_id = profile.user_id
-        and fencer.club_id = p_club_id
-        and fencer.archived_at is null
+      select person.id
+      from public.fencers as person
+      where person.user_id = profile.user_id
       limit 1
-    ) as fencer_id
+    ) as fencer_id,
+    exists (
+      select 1
+      from public.fencers as hosted
+      where hosted.user_id = profile.user_id
+        and hosted.club_id = p_club_id
+        and hosted.archived_at is null
+    ) as in_host_club
   from public.profiles as profile
   where profile.public_id = normalized;
 end;
@@ -1034,22 +1077,7 @@ create policy "tournament_participants_insert_member"
       select 1 from public.tournaments t
       where t.id = tournament_id and t.club_id = tournament_participants.club_id
     )
-    and (
-      (
-        is_guest = false
-        and exists (
-          select 1 from public.fencers f
-          where f.id = fencer_id and f.club_id = tournament_participants.club_id
-        )
-      )
-      or (
-        is_guest = true
-        and not exists (
-          select 1 from public.fencers f
-          where f.id = fencer_id
-        )
-      )
-    )
+    and public.tournament_participant_fencer_ok(fencer_id, club_id, is_guest)
   );
 
 create policy "tournament_participants_update_member"
@@ -1062,22 +1090,7 @@ create policy "tournament_participants_update_member"
       select 1 from public.tournaments t
       where t.id = tournament_id and t.club_id = tournament_participants.club_id
     )
-    and (
-      (
-        is_guest = false
-        and exists (
-          select 1 from public.fencers f
-          where f.id = fencer_id and f.club_id = tournament_participants.club_id
-        )
-      )
-      or (
-        is_guest = true
-        and not exists (
-          select 1 from public.fencers f
-          where f.id = fencer_id
-        )
-      )
-    )
+    and public.tournament_participant_fencer_ok(fencer_id, club_id, is_guest)
   );
 
 create policy "tournament_participants_delete_member"
@@ -1164,6 +1177,8 @@ grant select, insert, update, delete on public.tournament_bouts to authenticated
 
 revoke all on function public.lookup_checkin_by_public_id(text, uuid) from public;
 grant execute on function public.lookup_checkin_by_public_id(text, uuid) to authenticated;
+revoke all on function public.tournament_participant_fencer_ok(uuid, uuid, boolean) from public;
+grant execute on function public.tournament_participant_fencer_ok(uuid, uuid, boolean) to authenticated;
 
 grant usage on type public.tournament_status to authenticated;
 grant usage on type public.tournament_format to authenticated;

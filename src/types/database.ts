@@ -343,6 +343,7 @@ export type Database = {
           name: string;
           club_name: string | null;
           fencer_id: string | null;
+          in_host_club: boolean;
         }[];
       };
       link_fencer_to_profile: {
