@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Как пользоваться — Fencing Scorer</title>
+    <meta
+      name="description"
+      content="Простая инструкция по табло, списку бойцов, истории и турнирам Fencing Scorer."
+    />
+    <link rel="icon" type="image/x-icon" href="https://storage.googleapis.com/gpt-engineer-file-uploads/6xftjCMybqZzB2Y4RN3acMy1Z2L2/uploads/1757751018771-64px-Three-Arms.svg.png" />
+    <style>
+      :root {
+        --bg: hsl(210 25% 8%);
+        --fg: hsl(210 40% 98%);
+        --muted: hsl(215 20% 65%);
+        --card: hsl(215 25% 12%);
+        --border: hsl(215 20% 20%);
+        --gold: hsl(43 96% 56%);
+        --gold-fg: hsl(215 25% 12%);
+        --blue: hsl(220 91% 55%);
+        --red: hsl(0 84% 60%);
+        --note: hsl(215 20% 16%);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+        line-height: 1.55;
+      }
+
+      a {
+        color: var(--gold);
+      }
+
+      a:hover {
+        text-decoration: none;
+      }
+
+      .top {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem 1rem;
+        padding: 0.85rem 1.25rem;
+        background: hsl(210 25% 8% / 0.92);
+        border-bottom: 1px solid var(--border);
+        backdrop-filter: blur(10px);
+      }
+
+      .brand {
+        font-weight: 700;
+        color: var(--gold);
+        text-decoration: none;
+      }
+
+      .nav-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem 1rem;
+        font-size: 0.95rem;
+      }
+
+      .wrap {
+        max-width: 46rem;
+        margin: 0 auto;
+        padding: 2rem 1.25rem 4rem;
+      }
+
+      h1,
+      h2,
+      h3 {
+        line-height: 1.2;
+      }
+
+      h1 {
+        margin: 0 0 0.6rem;
+        font-size: clamp(1.8rem, 4vw, 2.4rem);
+        color: var(--gold);
+      }
+
+      .lead {
+        margin: 0 0 1.75rem;
+        color: var(--muted);
+        font-size: 1.05rem;
+      }
+
+      nav.toc {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+        padding: 1rem 1.15rem;
+        margin-bottom: 2.5rem;
+      }
+
+      nav.toc h2 {
+        margin: 0 0 0.6rem;
+        font-size: 1rem;
+        color: var(--fg);
+      }
+
+      nav.toc ol {
+        margin: 0;
+        padding-left: 1.2rem;
+      }
+
+      nav.toc li {
+        margin: 0.25rem 0;
+      }
+
+      section {
+        margin-bottom: 2.75rem;
+      }
+
+      h2 {
+        margin: 0 0 0.85rem;
+        padding-top: 0.4rem;
+        font-size: 1.45rem;
+        color: var(--gold);
+      }
+
+      h3 {
+        margin: 1.4rem 0 0.5rem;
+        font-size: 1.08rem;
+      }
+
+      p,
+      ul,
+      ol {
+        margin: 0 0 0.85rem;
+      }
+
+      ul,
+      ol {
+        padding-left: 1.2rem;
+      }
+
+      li + li {
+        margin-top: 0.35rem;
+      }
+
+      .ui {
+        display: inline-block;
+        padding: 0.05rem 0.4rem;
+        border: 1px solid var(--border);
+        border-radius: 0.3rem;
+        background: var(--note);
+        font-size: 0.92em;
+        white-space: nowrap;
+      }
+
+      .side-blue {
+        color: var(--blue);
+        font-weight: 600;
+      }
+
+      .side-red {
+        color: var(--red);
+        font-weight: 600;
+      }
+
+      figure {
+        margin: 1.1rem 0 1.4rem;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+        overflow: hidden;
+      }
+
+      figure img {
+        display: block;
+        width: 100%;
+        height: auto;
+        background: var(--note);
+      }
+
+      figcaption {
+        padding: 0.7rem 0.9rem 0.85rem;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .note {
+        background: var(--note);
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--gold);
+        border-radius: 0.4rem;
+        padding: 0.85rem 1rem;
+        margin: 1rem 0 1.2rem;
+      }
+
+      .note p:last-child {
+        margin-bottom: 0;
+      }
+
+      .formats {
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      @media (min-width: 640px) {
+        .formats {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+
+      .formats article {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+        padding: 0.9rem 1rem;
+      }
+
+      .formats h3 {
+        margin: 0 0 0.4rem;
+        color: var(--gold);
+        font-size: 1rem;
+      }
+
+      .formats p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      footer {
+        margin-top: 2rem;
+        padding-top: 1.25rem;
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <a class="brand" href="./">Fencing Scorer</a>
+      <div class="nav-links">
+        <a href="./">К табло</a>
+        <a href="./settings">К настройкам</a>
+      </div>
+    </div>
+
+    <main class="wrap">
+      <h1>Как пользоваться</h1>
+      <p class="lead">
+        Это судейское табло для клубных боёв. Счёт и время идут на телефоне или планшете.
+        Кнопки в приложении на английском — ниже они написаны так, как вы их видите на экране.
+      </p>
+
+      <nav class="toc" aria-label="Содержание">
+        <h2>Содержание</h2>
+        <ol>
+          <li><a href="#start">С чего начать</a></li>
+          <li><a href="#board">Табло</a></li>
+          <li><a href="#settings">Настройки на этом устройстве</a></li>
+          <li><a href="#account">Аккаунт и клуб</a></li>
+          <li><a href="#fencers">Список фехтовальщиков</a></li>
+          <li><a href="#history">История и статистика</a></li>
+          <li><a href="#tournaments">Турнир</a></li>
+          <li><a href="#offline">Если нет интернета</a></li>
+        </ol>
+      </nav>
+
+      <section id="start">
+        <h2>1. С чего начать</h2>
+        <p>На первом экране три пути:</p>
+        <ul>
+          <li><span class="ui">Sign in</span> — войти, если аккаунт уже есть.</li>
+          <li>
+            <span class="ui">Create account</span> — создать аккаунт. Нужны почта и пароль
+            не короче 6 символов. Иногда приложение просит подтвердить почту.
+          </li>
+          <li>
+            <span class="ui">Quick bout</span> — сразу открыть табло без входа. Идёт только
+            счёт и таймер: список людей и сохранение результатов недоступны.
+          </li>
+        </ul>
+        <figure>
+          <img src="help-screens/login.png" alt="Экран входа: почта, пароль, создание аккаунта и Quick bout" width="1280" height="800" />
+          <figcaption>Первый экран: вход, новый аккаунт или быстрый бой без сохранения.</figcaption>
+        </figure>
+        <p>
+          После регистрации приложение спросит имя. Клуб создавать не обязательно:
+          <span class="ui">Create club</span> — вы становитесь владельцем и попадаете в список клуба;
+          <span class="ui">Skip</span> — открывается табло, клуб можно завести позже в
+          <span class="ui">Account</span>.
+        </p>
+        <div class="note">
+          <p>
+            Без клуба табло работает, но результаты не сохраняются, а разделы людей, турниров
+            и истории закрыты.
+          </p>
+        </div>
+      </section>
+
+      <section id="board">
+        <h2>2. Табло</h2>
+        <p>
+          Слева — <span class="side-blue">синяя</span> сторона, справа —
+          <span class="side-red">красная</span>. По центру — время боя.
+        </p>
+        <figure>
+          <img src="help-screens/scoreboard.png" alt="Табло с синей и красной сторонами, таймером и кнопками Reset" width="1280" height="800" />
+          <figcaption>Главный экран. Пока в клубе никого нет, стороны можно оставить Anonymous.</figcaption>
+        </figure>
+
+        <h3>Время</h3>
+        <ul>
+          <li>Нажмите кнопку под часами, чтобы запустить или поставить на паузу.</li>
+          <li>
+            Пока время идёт, уколы ставить нельзя. На экране появляется
+            <span class="ui">Timer is running - scoring disabled</span>.
+          </li>
+          <li>Когда время доходит до нуля, оно само останавливается. Победу это само не ставит.</li>
+        </ul>
+
+        <h3>Счёт</h3>
+        <p>
+          Кнопки <span class="ui">+</span> и <span class="ui">−</span> работают до старта,
+          на паузе и после конца времени. Если кто-то первым набрал лимит уколов, под табло
+          появляется имя победителя, и таймер больше не запускается — пока вы не поправите счёт
+          или не сбросите бой.
+        </p>
+
+        <h3>Кого ставить на дорожку</h3>
+        <ul>
+          <li>Оба <span class="ui">Anonymous</span> — обычный бой «для зала», в историю не пишется.</li>
+          <li>Оба с именами — именной бой, его можно сохранить.</li>
+          <li>Выбран только один человек — старт не откроется. Нужны оба или никто.</li>
+        </ul>
+        <p>
+          После первого старта имена на этот бой фиксируются. Чтобы сменить пару, удержите
+          <span class="ui">Reset match</span>.
+        </p>
+
+        <h3>Сохранить и сбросить</h3>
+        <ul>
+          <li>
+            <span class="ui">Save victory</span> — записать победу (счёт разный).
+            Цветная полоска на кнопке показывает, кто впереди.
+          </li>
+          <li><span class="ui">Save draw</span> — записать ничью (счёт одинаковый).</li>
+          <li>Анонимный бой сохранить нельзя: кнопка серая.</li>
+          <li>
+            <span class="ui">Reset match</span> нужно <strong>удержать около секунды</strong>.
+            Счёт и время обнуляются, выбранные люди остаются.
+          </li>
+        </ul>
+        <div class="note">
+          <p>
+            Шестерёнка справа вверху ведёт в настройки. Иконки людей, кубка и часов —
+            в список клуба, турниры и историю. Они видны, когда вы в клубе.
+          </p>
+        </div>
+      </section>
+
+      <section id="settings">
+        <h2>3. Настройки на этом устройстве</h2>
+        <p>
+          Здесь задаются лимиты обычного клубного боя на <em>этом</em> телефоне или компьютере:
+          время от 1 до 5 минут и уколы от 5 до 20. Нажмите
+          <span class="ui">Save Settings</span> — настройки останутся после обновления страницы.
+        </p>
+        <figure>
+          <img src="help-screens/settings.png" alt="Страница Tournament Settings с ползунками времени и очков и кнопкой How to use" width="1280" height="800" />
+          <figcaption>Лимиты хранятся только на устройстве. Отсюда же открывается эта инструкция.</figcaption>
+        </figure>
+        <p>
+          Кнопка <span class="ui">How to use</span> открывает эту страницу.
+          Если вы вошли в аккаунт, ниже будет <span class="ui">Account</span>.
+        </p>
+        <p>
+          У турнира свои ползунки времени и уколов на карточке события. Они не зависят от этих настроек.
+        </p>
+      </section>
+
+      <section id="account">
+        <h2>4. Аккаунт и клуб</h2>
+        <p>В <span class="ui">Account</span> видно:</p>
+        <ul>
+          <li>
+            <span class="ui">ID</span> — ваш номер. Его нельзя менять. По нему вас добавляют
+            в чужой список или на чек-ин турнира.
+          </li>
+          <li><span class="ui">Name</span> — как вас зовут в клубе. Сохраняется кнопкой <span class="ui">Save name</span>.</li>
+          <li>
+            Если клуба ещё нет — поле <span class="ui">Club name</span> и
+            <span class="ui">Create club</span>. Вы сразу попадёте в список как владелец.
+          </li>
+          <li>Владелец может переименовать клуб: <span class="ui">Save club name</span>.</li>
+          <li>
+            <span class="ui">Leave club</span> — выйти из списка. Номер и старые бои остаются.
+            Последний владелец выйти не может.
+          </li>
+          <li><span class="ui">Sign out</span> — выйти из аккаунта на этом устройстве.</li>
+        </ul>
+      </section>
+
+      <section id="fencers">
+        <h2>5. Список фехтовальщиков</h2>
+        <p>Раздел <span class="ui">Fencers</span> — кто состоит в клубе.</p>
+        <figure>
+          <img src="help-screens/fencers.png" alt="Пустой список фехтовальщиков клуба" width="1280" height="800" />
+          <figcaption>Пустой клуб: добавьте имя или аккаунт по номеру ID.</figcaption>
+        </figure>
+        <ul>
+          <li>Введите имя и нажмите <span class="ui">Add</span> — появится человек без аккаунта.</li>
+          <li>
+            <span class="ui">Add by ID</span> — добавить того, у кого уже есть аккаунт.
+            Номер он смотрит у себя в <span class="ui">Account</span>.
+          </li>
+          <li>Карандаш — переименовать свободное имя (не привязанный аккаунт).</li>
+          <li>Иконка цепочки — привязать свободную строку к аккаунту по ID.</li>
+          <li>
+            Иконка архива — убрать из списка. История боёв не пропадает.
+            Позже человека можно вернуть, если включить
+            <span class="ui">Show archived</span>.
+          </li>
+          <li>Иконка графика — личная статистика этого человека.</li>
+        </ul>
+        <div class="note">
+          <p>
+            Имя у человека с аккаунтом меняется только в его <span class="ui">Account</span>,
+            не карандашом в списке.
+          </p>
+        </div>
+      </section>
+
+      <section id="history">
+        <h2>6. История и статистика</h2>
+        <p>
+          В <span class="ui">History</span> попадают только сохранённые <strong>клубные</strong> бои
+          с табло, не турнирные. Новые сверху. Можно отфильтровать по человеку.
+        </p>
+        <figure>
+          <img src="help-screens/history.png" alt="Пустая история клубных боёв" width="1280" height="800" />
+          <figcaption>Пока боёв нет. Именные результаты появятся после Save victory или Save draw.</figcaption>
+        </figure>
+        <p>
+          Вкладка <span class="ui">Stats</span> — победы, поражения и с кем чаще фехтовали.
+          Турнирные протоколы сюда не входят: их смотрите на карточке турнира.
+        </p>
+      </section>
+
+      <section id="tournaments">
+        <h2>7. Турнир</h2>
+        <p>
+          Турнир — это один клубный вечер на одной дорожке: отметить людей, выбрать формат,
+          провести бои, посмотреть таблицу.
+        </p>
+        <figure>
+          <img src="help-screens/tournaments.png" alt="Пустой список турниров с кнопкой New tournament" width="1280" height="800" />
+          <figcaption>Список событий клуба. Пока ничего не создано — нажмите New tournament.</figcaption>
+        </figure>
+
+        <h3>Подготовка</h3>
+        <ol>
+          <li>Нажмите <span class="ui">New tournament</span>. Если имя не задать, подставится дата.</li>
+          <li>
+            На чек-ине отметьте, кто сегодня фехтует:
+            <span class="ui">From roster</span> — из списка клуба,
+            <span class="ui">Add free fencer</span> — гость по имени,
+            <span class="ui">Add by ID</span> — человек с аккаунтом по номеру.
+            Гость в клубный список сам не попадает. Нужны хотя бы двое.
+          </li>
+          <li>Выберите формат. Для круговой, групп и швейцарки ещё схему очков за бой.</li>
+          <li>
+            Нажмите <span class="ui">Draw bouts</span>, проверьте очередь, при необходимости
+            <span class="ui">Draw again</span>.
+          </li>
+          <li>
+            <span class="ui">Start event</span> запускает вечер. После этого состав и формат
+            уже не меняются.
+          </li>
+        </ol>
+
+        <h3>Какой формат выбрать</h3>
+        <div class="formats">
+          <article>
+            <h3>Round robin</h3>
+            <p>Все со всеми. Удобно для небольшой группы.</p>
+          </article>
+          <article>
+            <h3>Playoff</h3>
+            <p>Сетка на выбывание. Нужно ровно 2, 4, 8, 16 или 32 человека. Ничью сохранить нельзя — нужен победитель.</p>
+          </article>
+          <article>
+            <h3>Groups + playoff</h3>
+            <p>Сначала круговые группы, потом сетка. Число групп и сколько выходят выбираете сами.</p>
+          </article>
+          <article>
+            <h3>Swiss</h3>
+            <p>Туры по текущим результатам. Число туров считается само.</p>
+          </article>
+          <article>
+            <h3>King of the hill</h3>
+            <p>
+              Царь горы: победитель остаётся, к нему выходит следующий.
+              Жеребьёвки нет — пару выбираете на табло.
+            </p>
+          </article>
+        </div>
+
+        <h3>Как судить вечер</h3>
+        <ul>
+          <li>
+            Вкладки <span class="ui">Queue</span>, <span class="ui">Table</span>,
+            <span class="ui">Bouts</span> — очередь, таблица и сыгранные бои.
+          </li>
+          <li>Старт слота открывает табло с уже подставленной парой и лимитами этого турнира.</li>
+          <li>
+            Сохранение с табло пишет результат в турнир, не в клубную историю.
+            Для этого нужна сеть.
+          </li>
+          <li>
+            Ошиблись в счёте — откройте <span class="ui">Bouts</span> и поправьте уколы там,
+            не с табло.
+          </li>
+          <li>
+            <span class="ui">Finish event</span> можно нажать в любой момент: места считаются
+            по уже сыгранному.
+          </li>
+        </ul>
+      </section>
+
+      <section id="offline">
+        <h2>8. Если нет интернета</h2>
+        <ul>
+          <li>Идущий бой всегда на устройстве. Wi‑Fi для счёта и таймера не нужен.</li>
+          <li>
+            Клубный именной результат без сети останется на телефоне и уйдёт в историю,
+            когда интернет появится.
+          </li>
+          <li>
+            Турнирный бой без сети не сохранится: на экране будет ошибка, пара на табло останется.
+            Подключитесь и нажмите сохранение ещё раз.
+          </li>
+        </ul>
+      </section>
+
+      <footer>
+        <p>
+          Прямая ссылка на эту страницу:
+          <a href="./help.html">/help.html</a>
+          (короткий адрес <a href="./help">/help</a> тоже открывает её).
+          Из приложения — шестерёнка → <span class="ui">How to use</span>.
+        </p>
+        <p><a href="./">Вернуться к табло</a></p>
+      </footer>
+    </main>
+  </body>
+</html>
