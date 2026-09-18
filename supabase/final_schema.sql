@@ -106,49 +106,6 @@ begin
 end;
 $$;
 
-create table public.profiles (
-  user_id uuid primary key references auth.users (id) on delete cascade,
-  name text not null,
-  public_id text not null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  constraint profiles_name_not_blank check (char_length(trim(name)) > 0),
-  constraint profiles_public_id_digits check (public_id ~ '^[0-9]+$'),
-  constraint profiles_public_id_unique unique (public_id)
-);
-
-create trigger profiles_set_updated_at
-  before update on public.profiles
-  for each row
-  execute procedure public.set_updated_at();
-
-create or replace function public.profiles_assign_public_id()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if tg_op = 'UPDATE' then
-    new.public_id := old.public_id;
-    return new;
-  end if;
-
-  perform pg_advisory_xact_lock(871234002);
-
-  select (coalesce(max(public_id::bigint), 1000) + 1)::text
-  into new.public_id
-  from public.profiles;
-
-  return new;
-end;
-$$;
-
-create trigger profiles_assign_public_id
-  before insert or update on public.profiles
-  for each row
-  execute procedure public.profiles_assign_public_id();
-
 create or replace function public.save_own_profile(p_name text)
 returns text
 language plpgsql
@@ -157,7 +114,6 @@ set search_path = public
 as $$
 declare
   normalized text;
-  profile_public_id text;
 begin
   if auth.uid() is null then
     raise exception 'Not authenticated';
@@ -169,24 +125,15 @@ begin
   end if;
 
   perform pg_advisory_xact_lock(871234001, hashtext(auth.uid()::text));
-
-  insert into public.profiles (user_id, name)
-  values (auth.uid(), normalized)
-  on conflict (user_id) do update
-    set name = excluded.name
-  returning public_id into profile_public_id;
-
   perform set_config('fencing.fencer_link', '1', true);
 
   update public.fencers
-  set name = normalized,
-      public_id = coalesce(public_id, profile_public_id)
-  where user_id = auth.uid()
-    and archived_at is null;
+  set name = normalized
+  where user_id = auth.uid();
 
   if not found then
-    insert into public.fencers (club_id, name, user_id, role, public_id)
-    values (null, normalized, auth.uid(), null, profile_public_id);
+    insert into public.fencers (club_id, name, user_id, role)
+    values (null, normalized, auth.uid(), null);
   end if;
 
   return normalized;
@@ -201,8 +148,6 @@ set search_path = public
 as $$
 declare
   club_name text;
-  profile_name text;
-  profile_public_id text;
   existing_id uuid;
   existing_club_id uuid;
   new_club_id uuid;
@@ -224,17 +169,12 @@ begin
   where user_id = auth.uid()
   limit 1;
 
-  if existing_club_id is not null then
-    raise exception 'Already in a club';
+  if existing_id is null then
+    raise exception 'Profile name is required';
   end if;
 
-  select name, public_id
-  into profile_name, profile_public_id
-  from public.profiles
-  where user_id = auth.uid();
-
-  if profile_name is null then
-    raise exception 'Profile name is required';
+  if existing_club_id is not null then
+    raise exception 'Already in a club';
   end if;
 
   insert into public.clubs (name)
@@ -243,18 +183,11 @@ begin
 
   perform set_config('fencing.fencer_link', '1', true);
 
-  if existing_id is not null then
-    update public.fencers
-    set club_id = new_club_id,
-        role = 'owner',
-        name = profile_name,
-        public_id = coalesce(public_id, profile_public_id),
-        archived_at = null
-    where id = existing_id;
-  else
-    insert into public.fencers (club_id, name, user_id, role, public_id)
-    values (new_club_id, profile_name, auth.uid(), 'owner', profile_public_id);
-  end if;
+  update public.fencers
+  set club_id = new_club_id,
+      role = 'owner',
+      archived_at = null
+  where id = existing_id;
 
   return new_club_id;
 end;
@@ -381,6 +314,43 @@ create trigger fencers_freeze_link
   for each row
   execute procedure public.fencers_freeze_link();
 
+create or replace function public.fencers_assign_public_id()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.user_id is null then
+    new.public_id := null;
+    return new;
+  end if;
+
+  if tg_op = 'UPDATE' and old.public_id is not null then
+    new.public_id := old.public_id;
+    return new;
+  end if;
+
+  if new.public_id is not null then
+    return new;
+  end if;
+
+  perform pg_advisory_xact_lock(871234002);
+
+  select (coalesce(max(public_id::bigint), 1000) + 1)::text
+  into new.public_id
+  from public.fencers
+  where public_id is not null;
+
+  return new;
+end;
+$$;
+
+create trigger fencers_assign_public_id
+  before insert or update on public.fencers
+  for each row
+  execute procedure public.fencers_assign_public_id();
+
 create or replace function public.fencers_protect_last_owner()
 returns trigger
 language plpgsql
@@ -462,11 +432,9 @@ set search_path = public
 as $$
 declare
   normalized text;
-  profile_user uuid;
-  profile_name text;
-  profile_public_id text;
   target public.fencers%rowtype;
   existing public.fencers%rowtype;
+  existing_id uuid;
   lock_a uuid;
   lock_b uuid;
 begin
@@ -500,36 +468,30 @@ begin
     raise exception 'Fencer is already linked';
   end if;
 
-  select user_id, name, public_id
-  into profile_user, profile_name, profile_public_id
-  from public.profiles
-  where public_id = normalized;
-
-  if profile_user is null then
-    raise exception 'Profile not found';
-  end if;
-
-  perform pg_advisory_xact_lock(871234001, hashtext(profile_user::text));
-
   select *
   into existing
   from public.fencers
-  where user_id = profile_user
+  where public_id = normalized
+    and user_id is not null
   limit 1;
 
-  if existing.id is not null then
-    if existing.id < p_fencer_id then
-      lock_a := existing.id;
-      lock_b := p_fencer_id;
-    else
-      lock_a := p_fencer_id;
-      lock_b := existing.id;
-    end if;
-    perform pg_advisory_xact_lock(871234003, hashtext(lock_a::text));
-    perform pg_advisory_xact_lock(871234003, hashtext(lock_b::text));
-  else
-    perform pg_advisory_xact_lock(871234003, hashtext(p_fencer_id::text));
+  if existing.id is null then
+    raise exception 'Profile not found';
   end if;
+
+  existing_id := existing.id;
+
+  perform pg_advisory_xact_lock(871234001, hashtext(existing.user_id::text));
+
+  if existing_id < p_fencer_id then
+    lock_a := existing_id;
+    lock_b := p_fencer_id;
+  else
+    lock_a := p_fencer_id;
+    lock_b := existing_id;
+  end if;
+  perform pg_advisory_xact_lock(871234003, hashtext(lock_a::text));
+  perform pg_advisory_xact_lock(871234003, hashtext(lock_b::text));
 
   select *
   into target
@@ -544,21 +506,13 @@ begin
   select *
   into existing
   from public.fencers
-  where user_id = profile_user
-  limit 1;
+  where id = existing_id;
+
+  if existing.id is null or existing.user_id is null then
+    raise exception 'Profile not found';
+  end if;
 
   perform set_config('fencing.fencer_link', '1', true);
-
-  if existing.id is null then
-    update public.fencers
-    set user_id = profile_user,
-        role = 'member',
-        name = profile_name,
-        public_id = profile_public_id
-    where id = p_fencer_id;
-
-    return p_fencer_id;
-  end if;
 
   if existing.club_id is not null then
     if existing.club_id = target.club_id then
@@ -573,7 +527,7 @@ begin
     where club_id = target.club_id
       and archived_at is null
       and id <> target.id
-      and lower(trim(name)) = lower(trim(profile_name))
+      and lower(trim(name)) = lower(trim(existing.name))
   ) then
     raise exception 'A fencer with this name already exists';
   end if;
@@ -637,8 +591,6 @@ begin
   update public.fencers
   set club_id = target.club_id,
       role = 'member',
-      name = profile_name,
-      public_id = coalesce(public_id, profile_public_id),
       archived_at = null
   where id = existing.id;
 
@@ -729,12 +681,9 @@ set search_path = public
 as $$
 declare
   normalized text;
-  profile_user uuid;
-  profile_name text;
-  profile_public_id text;
   my_club uuid;
   existing public.fencers%rowtype;
-  new_id uuid;
+  existing_id uuid;
 begin
   if auth.uid() is null then
     raise exception 'Not authenticated';
@@ -757,45 +706,43 @@ begin
     raise exception 'Not a club member';
   end if;
 
-  select user_id, name, public_id
-  into profile_user, profile_name, profile_public_id
-  from public.profiles
-  where public_id = normalized;
+  select *
+  into existing
+  from public.fencers
+  where public_id = normalized
+    and user_id is not null
+  limit 1;
 
-  if profile_user is null then
+  if existing.id is null then
     raise exception 'Profile not found';
   end if;
 
-  perform pg_advisory_xact_lock(871234001, hashtext(profile_user::text));
+  existing_id := existing.id;
+
+  perform pg_advisory_xact_lock(871234001, hashtext(existing.user_id::text));
 
   select *
   into existing
   from public.fencers
-  where user_id = profile_user
-  limit 1;
+  where id = existing_id;
 
-  if existing.id is not null and existing.club_id is not null then
+  if existing.id is null or existing.user_id is null then
+    raise exception 'Profile not found';
+  end if;
+
+  if existing.club_id is not null then
     raise exception 'Already in a club';
   end if;
 
   perform set_config('fencing.fencer_link', '1', true);
 
-  if existing.id is not null then
-    update public.fencers
-    set club_id = my_club,
-        role = 'member',
-        name = profile_name,
-        public_id = coalesce(public_id, profile_public_id),
-        archived_at = null
-    where id = existing.id;
-    return existing.id;
-  end if;
+  update public.fencers
+  set club_id = my_club,
+      role = 'member',
+      archived_at = null
+  where id = existing.id;
 
-  insert into public.fencers (club_id, name, user_id, role, public_id)
-  values (my_club, profile_name, profile_user, 'member', profile_public_id)
-  returning id into new_id;
-
-  return new_id;
+  return existing.id;
 end;
 $$;
 
@@ -846,7 +793,6 @@ create index matches_red_fencer_idx
   on public.matches (red_fencer_id);
 
 alter table public.clubs enable row level security;
-alter table public.profiles enable row level security;
 alter table public.fencers enable row level security;
 alter table public.matches enable row level security;
 
@@ -860,22 +806,6 @@ create policy "clubs_update_owner"
   to authenticated
   using (public.is_club_owner(id))
   with check (public.is_club_owner(id));
-
-create policy "profiles_select_own"
-  on public.profiles for select
-  to authenticated
-  using (user_id = auth.uid());
-
-create policy "profiles_insert_own"
-  on public.profiles for insert
-  to authenticated
-  with check (user_id = auth.uid());
-
-create policy "profiles_update_own"
-  on public.profiles for update
-  to authenticated
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid());
 
 create policy "fencers_select_member"
   on public.fencers for select
@@ -931,7 +861,7 @@ revoke all on function public.link_fencer_to_profile(uuid, text) from public;
 revoke all on function public.unlink_and_archive(uuid) from public;
 revoke all on function public.leave_own_club() from public;
 revoke all on function public.add_linked_fencer(text) from public;
-revoke all on function public.profiles_assign_public_id() from public;
+revoke all on function public.fencers_assign_public_id() from public;
 revoke all on function public.fencers_freeze_link() from public;
 revoke all on function public.fencers_protect_last_owner() from public;
 grant execute on function public.is_club_member(uuid) to authenticated;
@@ -947,11 +877,9 @@ grant execute on function public.add_linked_fencer(text) to authenticated;
 grant usage on type public.club_member_role to authenticated;
 
 revoke all on public.clubs from anon;
-revoke all on public.profiles from anon;
 revoke all on public.fencers from anon;
 revoke all on public.matches from anon;
 grant select, update on public.clubs to authenticated;
-grant select, insert, update on public.profiles to authenticated;
 grant select, insert, update on public.fencers to authenticated;
 grant select, insert on public.matches to authenticated;
 
@@ -1086,32 +1014,15 @@ begin
 
   return query
   select
-    profile.user_id,
-    profile.name,
-    (
-      select club.name
-      from public.fencers as linked
-      join public.clubs as club on club.id = linked.club_id
-      where linked.user_id = profile.user_id
-        and linked.archived_at is null
-        and linked.club_id is not null
-      limit 1
-    ) as club_name,
-    (
-      select person.id
-      from public.fencers as person
-      where person.user_id = profile.user_id
-      limit 1
-    ) as fencer_id,
-    exists (
-      select 1
-      from public.fencers as hosted
-      where hosted.user_id = profile.user_id
-        and hosted.club_id = p_club_id
-        and hosted.archived_at is null
-    ) as in_host_club
-  from public.profiles as profile
-  where profile.public_id = normalized;
+    person.user_id,
+    person.name,
+    club.name as club_name,
+    person.id as fencer_id,
+    coalesce(person.club_id = p_club_id and person.archived_at is null, false) as in_host_club
+  from public.fencers as person
+  left join public.clubs as club on club.id = person.club_id
+  where person.public_id = normalized
+    and person.user_id is not null;
 end;
 $$;
 
