@@ -354,6 +354,10 @@ export type Database = {
         Args: { p_fencer_id: string };
         Returns: string;
       };
+      leave_own_club: {
+        Args: Record<string, never>;
+        Returns: string;
+      };
       add_linked_fencer: {
         Args: { p_public_id: string };
         Returns: string;

@@ -12,6 +12,7 @@ import type { Session, User } from "@supabase/supabase-js";
 import {
   createOwnClub,
   getOwnProfile,
+  leaveOwnClub,
   loadOwnAccountWithRetry,
   renameOwnClub,
   saveOwnProfile,
@@ -59,6 +60,7 @@ type AuthContextValue = {
   saveProfile: (name: string) => Promise<{ error: string | null }>;
   createClub: (name: string) => Promise<{ error: string | null }>;
   renameClub: (name: string) => Promise<{ error: string | null }>;
+  leaveClub: () => Promise<{ error: string | null }>;
   completeSetup: (name: string, clubName: string | null) => Promise<{ error: string | null }>;
 };
 
@@ -249,6 +251,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const leaveClub = useCallback(async () => {
+    try {
+      await leaveOwnClub();
+      setClubId(null);
+      setClubRole(null);
+      setClubName(null);
+      return { error: null };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Could not leave the club." };
+    }
+  }, []);
+
   const completeSetup = useCallback(async (name: string, nextClubName: string | null) => {
     try {
       const saved = await saveOwnProfile(name);
@@ -291,6 +305,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       saveProfile,
       createClub,
       renameClub,
+      leaveClub,
       completeSetup,
     }),
     [
@@ -312,6 +327,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       saveProfile,
       createClub,
       renameClub,
+      leaveClub,
       completeSetup,
     ]
   );

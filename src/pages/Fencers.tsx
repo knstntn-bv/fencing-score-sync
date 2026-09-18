@@ -126,7 +126,7 @@ export default function FencersPage() {
                   try {
                     await fencers.archive.mutateAsync(fencer);
                     toast.success(
-                      isLinkedFencer(fencer) ? "Account unlinked and archived" : "Fencer archived"
+                      isLinkedFencer(fencer) ? "Removed from the club" : "Fencer archived"
                     );
                     if (fencer.userId && fencer.userId === user?.id) retryAccount();
                   } catch (error) {
@@ -329,7 +329,7 @@ function FencerRow({
               <Button
                 variant="outline"
                 size="icon"
-                aria-label={linked ? `Unlink and archive ${fencer.name}` : `Archive ${fencer.name}`}
+                aria-label={linked ? `Remove ${fencer.name} from the club` : `Archive ${fencer.name}`}
               >
                 <Archive className="h-4 w-4" />
               </Button>
@@ -337,18 +337,18 @@ function FencerRow({
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>
-                  {linked ? `Unlink and archive ${fencer.name}?` : `Archive ${fencer.name}?`}
+                  {linked ? `Remove ${fencer.name} from the club?` : `Archive ${fencer.name}?`}
                 </AlertDialogTitle>
                 <AlertDialogDescription>
                   {linked
-                    ? "This unlinks their account and archives the roster row. Bout history stays. The last owner cannot be removed."
+                    ? "They leave the roster. Their id and bout history stay. The last owner cannot be removed."
                     : "They leave the roster but stay in bout history. You can restore them later."}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction onClick={() => void onArchive()}>
-                  {linked ? "Unlink" : "Archive"}
+                  {linked ? "Remove" : "Archive"}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>

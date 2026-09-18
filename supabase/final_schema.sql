@@ -418,8 +418,18 @@ begin
   end if;
 
   leaving :=
-    (old.role = 'owner' and old.user_id is not null and old.archived_at is null)
-    and not (new.role = 'owner' and new.user_id is not null and new.archived_at is null);
+    (
+      old.role = 'owner'
+      and old.user_id is not null
+      and old.archived_at is null
+      and old.club_id is not null
+    )
+    and not (
+      new.role = 'owner'
+      and new.user_id is not null
+      and new.archived_at is null
+      and new.club_id is not null
+    );
 
   if leaving
     and not exists (
@@ -440,7 +450,7 @@ end;
 $$;
 
 create trigger fencers_protect_last_owner
-  before delete or update of role, user_id, archived_at on public.fencers
+  before delete or update of role, user_id, archived_at, club_id on public.fencers
   for each row
   execute procedure public.fencers_protect_last_owner();
 
@@ -559,13 +569,42 @@ begin
   perform set_config('fencing.fencer_link', '1', true);
 
   update public.fencers
-  set user_id = null,
-      role = null,
-      public_id = null,
-      archived_at = coalesce(archived_at, now())
+  set club_id = null,
+      role = null
   where id = p_fencer_id;
 
   return p_fencer_id;
+end;
+$$;
+
+create or replace function public.leave_own_club()
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  perform pg_advisory_xact_lock(871234001, hashtext(auth.uid()::text));
+
+  select id
+  into target_id
+  from public.fencers
+  where user_id = auth.uid()
+    and club_id is not null
+    and archived_at is null
+  limit 1;
+
+  if target_id is null then
+    raise exception 'Not a club member';
+  end if;
+
+  return public.unlink_and_archive(target_id);
 end;
 $$;
 
@@ -777,6 +816,7 @@ revoke all on function public.create_own_club(text) from public;
 revoke all on function public.rename_own_club(text) from public;
 revoke all on function public.link_fencer_to_profile(uuid, text) from public;
 revoke all on function public.unlink_and_archive(uuid) from public;
+revoke all on function public.leave_own_club() from public;
 revoke all on function public.add_linked_fencer(text) from public;
 revoke all on function public.profiles_assign_public_id() from public;
 revoke all on function public.fencers_freeze_link() from public;
@@ -788,6 +828,7 @@ grant execute on function public.create_own_club(text) to authenticated;
 grant execute on function public.rename_own_club(text) to authenticated;
 grant execute on function public.link_fencer_to_profile(uuid, text) to authenticated;
 grant execute on function public.unlink_and_archive(uuid) to authenticated;
+grant execute on function public.leave_own_club() to authenticated;
 grant execute on function public.add_linked_fencer(text) to authenticated;
 
 grant usage on type public.club_member_role to authenticated;
