@@ -1,12 +1,30 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
+import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
+import { HELP_PAGE_FILE, isHelpRoute } from "@/lib/helpPage";
 import Login from "@/pages/Login";
 import Onboarding from "@/pages/Onboarding";
 
 export default function AuthGate({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  const helpRoute = isHelpRoute(location.pathname);
   const { configured, loading, user, personName, accountError, retryAccount, signOut, guestBout } =
     useAuth();
+
+  useEffect(() => {
+    if (helpRoute) {
+      window.location.replace(HELP_PAGE_FILE);
+    }
+  }, [helpRoute]);
+
+  if (helpRoute) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">
+        Opening guide…
+      </div>
+    );
+  }
 
   if (loading) {
     return (

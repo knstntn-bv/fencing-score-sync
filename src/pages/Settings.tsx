@@ -3,10 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Save, UserRound } from "lucide-react";
+import { ArrowLeft, CircleHelp, Save, UserRound } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
+import { HELP_PAGE_FILE } from "@/lib/helpPage";
 import type { ClubSettings } from "@/lib/settings";
 
 interface SettingsProps {
@@ -125,6 +126,13 @@ const Settings = ({ settings, onSave }: SettingsProps) => {
           <Button onClick={handleSave} className="w-full" size="lg">
             <Save className="h-4 w-4 mr-2" />
             Save Settings
+          </Button>
+
+          <Button asChild variant="outline" className="w-full" size="lg">
+            <a href={HELP_PAGE_FILE}>
+              <CircleHelp className="h-4 w-4 mr-2" />
+              How to use
+            </a>
           </Button>
 
           {configured && user ? (
