@@ -6,7 +6,7 @@ import {
   archiveFencer,
   createFencer,
   fencerErrorMessage,
-  linkFencerToProfile,
+  mergeNicknameIntoPerson,
   listFencers,
   readFencerCache,
   renameFencer,
@@ -66,7 +66,7 @@ export function useFencers() {
 
   const link = useMutation({
     mutationFn: ({ fencerId, publicId }: { fencerId: string; publicId: string }) =>
-      linkFencerToProfile(fencerId, publicId),
+      mergeNicknameIntoPerson(fencerId, publicId),
     onSuccess: invalidate,
   });
 

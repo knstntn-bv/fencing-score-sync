@@ -106,7 +106,7 @@ begin
 end;
 $$;
 
-create or replace function public.save_own_profile(p_name text)
+create or replace function public.save_own_name(p_name text)
 returns text
 language plpgsql
 security definer
@@ -170,7 +170,7 @@ begin
   limit 1;
 
   if existing_id is null then
-    raise exception 'Profile name is required';
+    raise exception 'Name is required';
   end if;
 
   if existing_club_id is not null then
@@ -298,7 +298,7 @@ begin
 
   if old.user_id is not null then
     if new.name is distinct from old.name then
-      raise exception 'linked fencer name can only be changed from the profile';
+      raise exception 'linked fencer name can only be changed from the account';
     end if;
     if new.archived_at is distinct from old.archived_at then
       raise exception 'linked fencer must be unlinked to archive';
@@ -424,7 +424,7 @@ create trigger fencers_protect_last_owner
   for each row
   execute procedure public.fencers_protect_last_owner();
 
-create or replace function public.link_fencer_to_profile(p_fencer_id uuid, p_public_id text)
+create or replace function public.merge_nickname_into_person(p_fencer_id uuid, p_public_id text)
 returns uuid
 language plpgsql
 security definer
@@ -476,7 +476,7 @@ begin
   limit 1;
 
   if existing.id is null then
-    raise exception 'Profile not found';
+    raise exception 'Account not found';
   end if;
 
   existing_id := existing.id;
@@ -509,7 +509,7 @@ begin
   where id = existing_id;
 
   if existing.id is null or existing.user_id is null then
-    raise exception 'Profile not found';
+    raise exception 'Account not found';
   end if;
 
   perform set_config('fencing.fencer_link', '1', true);
@@ -598,7 +598,7 @@ begin
 end;
 $$;
 
-create or replace function public.unlink_and_archive(p_fencer_id uuid)
+create or replace function public.detach_from_club(p_fencer_id uuid)
 returns uuid
 language plpgsql
 security definer
@@ -669,7 +669,7 @@ begin
     raise exception 'Not a club member';
   end if;
 
-  return public.unlink_and_archive(target_id);
+  return public.detach_from_club(target_id);
 end;
 $$;
 
@@ -714,7 +714,7 @@ begin
   limit 1;
 
   if existing.id is null then
-    raise exception 'Profile not found';
+    raise exception 'Account not found';
   end if;
 
   existing_id := existing.id;
@@ -727,7 +727,7 @@ begin
   where id = existing_id;
 
   if existing.id is null or existing.user_id is null then
-    raise exception 'Profile not found';
+    raise exception 'Account not found';
   end if;
 
   if existing.club_id is not null then
@@ -854,11 +854,11 @@ create policy "matches_insert_member"
 
 revoke all on function public.is_club_member(uuid) from public;
 revoke all on function public.is_club_owner(uuid) from public;
-revoke all on function public.save_own_profile(text) from public;
+revoke all on function public.save_own_name(text) from public;
 revoke all on function public.create_own_club(text) from public;
 revoke all on function public.rename_own_club(text) from public;
-revoke all on function public.link_fencer_to_profile(uuid, text) from public;
-revoke all on function public.unlink_and_archive(uuid) from public;
+revoke all on function public.merge_nickname_into_person(uuid, text) from public;
+revoke all on function public.detach_from_club(uuid) from public;
 revoke all on function public.leave_own_club() from public;
 revoke all on function public.add_linked_fencer(text) from public;
 revoke all on function public.fencers_assign_public_id() from public;
@@ -866,11 +866,11 @@ revoke all on function public.fencers_freeze_link() from public;
 revoke all on function public.fencers_protect_last_owner() from public;
 grant execute on function public.is_club_member(uuid) to authenticated;
 grant execute on function public.is_club_owner(uuid) to authenticated;
-grant execute on function public.save_own_profile(text) to authenticated;
+grant execute on function public.save_own_name(text) to authenticated;
 grant execute on function public.create_own_club(text) to authenticated;
 grant execute on function public.rename_own_club(text) to authenticated;
-grant execute on function public.link_fencer_to_profile(uuid, text) to authenticated;
-grant execute on function public.unlink_and_archive(uuid) to authenticated;
+grant execute on function public.merge_nickname_into_person(uuid, text) to authenticated;
+grant execute on function public.detach_from_club(uuid) to authenticated;
 grant execute on function public.leave_own_club() to authenticated;
 grant execute on function public.add_linked_fencer(text) to authenticated;
 

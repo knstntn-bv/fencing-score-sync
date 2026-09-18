@@ -292,7 +292,7 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
-      save_own_profile: {
+      save_own_name: {
         Args: { p_name: string };
         Returns: string;
       };
@@ -322,11 +322,11 @@ export type Database = {
           in_host_club: boolean;
         }[];
       };
-      link_fencer_to_profile: {
+      merge_nickname_into_person: {
         Args: { p_fencer_id: string; p_public_id: string };
         Returns: string;
       };
-      unlink_and_archive: {
+      detach_from_club: {
         Args: { p_fencer_id: string };
         Returns: string;
       };

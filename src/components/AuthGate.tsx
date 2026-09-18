@@ -5,7 +5,7 @@ import Login from "@/pages/Login";
 import Onboarding from "@/pages/Onboarding";
 
 export default function AuthGate({ children }: { children: ReactNode }) {
-  const { configured, loading, user, profileName, accountError, retryAccount, signOut, guestBout } =
+  const { configured, loading, user, personName, accountError, retryAccount, signOut, guestBout } =
     useAuth();
 
   if (loading) {
@@ -38,7 +38,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (configured && user && !profileName) {
+  if (configured && user && !personName) {
     return <Onboarding />;
   }
 
