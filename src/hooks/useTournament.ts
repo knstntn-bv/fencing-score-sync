@@ -186,20 +186,20 @@ export function useTournament(id: string | undefined) {
       if (!normalizePublicId(publicId)) throw new Error("Enter a valid ID.");
       const found = await lookupCheckinByPublicId(publicId, clubId);
       if (!found) throw new Error("No account with that ID.");
+      const personId = found.fencerId;
+      if (!personId) throw new Error("No account with that ID.");
       const existing = await listParticipants(id);
-      const rosterFencerId = found.fencerId;
       const already = existing.find(
-        (row) =>
-          row.fencerId === found.userId || (rosterFencerId != null && row.fencerId === rosterFencerId)
+        (row) => row.fencerId === personId || row.fencerId === found.userId
       );
       if (already) throw new Error("Already checked in.");
-      if (rosterFencerId) {
+      if (found.inHostClub) {
         const fencer =
-          [...roster.active, ...roster.archived].find((row) => row.id === rosterFencerId) ?? null;
+          [...roster.active, ...roster.archived].find((row) => row.id === personId) ?? null;
         const clubName = await getClubName(clubId);
         const row = await addParticipant({
           tournamentId: id,
-          fencerId: rosterFencerId,
+          fencerId: personId,
           clubId,
           name: fencer?.name ?? found.name,
           clubName,
@@ -210,7 +210,7 @@ export function useTournament(id: string | undefined) {
       }
       const row = await addParticipant({
         tournamentId: id,
-        fencerId: found.userId,
+        fencerId: personId,
         clubId,
         name: found.name,
         clubName: found.clubName,

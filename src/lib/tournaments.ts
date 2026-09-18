@@ -256,6 +256,7 @@ export type CheckInLookup = {
   name: string;
   clubName: string | null;
   fencerId: string | null;
+  inHostClub: boolean;
 };
 
 export function normalizePublicId(value: string): string | null {
@@ -284,5 +285,6 @@ export async function lookupCheckinByPublicId(
     name: row.name,
     clubName: row.club_name,
     fencerId: row.fencer_id,
+    inHostClub: Boolean(row.in_host_club),
   };
 }
