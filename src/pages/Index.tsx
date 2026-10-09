@@ -332,25 +332,25 @@ const Index = ({ settings }: IndexProps) => {
     if (selection.status !== "ok" || selection.mode !== "named") return;
 
     setSaving(true);
-    const { blueResult, redResult } = scoreResults(player1Score, player2Score);
-    const payload = {
-      id: newMatchId(),
-      clubId,
-      blueFencerId: selection.blueId,
-      redFencerId: selection.redId,
-      blueName,
-      redName,
-      blueScore: player1Score,
-      redScore: player2Score,
-      blueResult,
-      redResult,
-      timeLimitSec: settings.timeLimit,
-      pointsLimit: settings.pointsLimit,
-      remainingSec,
-      startedAt: startedAt ?? new Date().toISOString(),
-      finishedAt: new Date().toISOString(),
-    };
     try {
+      const { blueResult, redResult } = scoreResults(player1Score, player2Score);
+      const payload = {
+        id: newMatchId(),
+        clubId,
+        blueFencerId: selection.blueId,
+        redFencerId: selection.redId,
+        blueName,
+        redName,
+        blueScore: player1Score,
+        redScore: player2Score,
+        blueResult,
+        redResult,
+        timeLimitSec: settings.timeLimit,
+        pointsLimit: settings.pointsLimit,
+        remainingSec,
+        startedAt: startedAt ?? new Date().toISOString(),
+        finishedAt: new Date().toISOString(),
+      };
       await enqueueMatchOutbox(clubId, payload);
       setSaved(true);
       toast.message("Saved on this device. Waiting to upload.");
