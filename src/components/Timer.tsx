@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { createCountdownController } from "@/lib/countdown";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Play, Pause } from "lucide-react";
@@ -16,29 +17,46 @@ export default function Timer({
   onStateChange,
   onRemainingChange,
 }: TimerProps) {
-  const [timeLeft, setTimeLeft] = useState(initialMinutes * 60);
+  const [durationMs] = useState(() => Math.round(initialMinutes * 60 * 1000));
+  const [timeLeft, setTimeLeft] = useState(() => Math.ceil(durationMs / 1000));
   const [isRunning, setIsRunning] = useState(false);
+  const callbacks = useRef({ onStateChange, onRemainingChange });
+  const controller = useRef<ReturnType<typeof createCountdownController> | null>(null);
 
   useEffect(() => {
-    onRemainingChange?.(timeLeft);
-  }, [timeLeft]);
+    callbacks.current = { onStateChange, onRemainingChange };
+  }, [onStateChange, onRemainingChange]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-    
-    if (isRunning && timeLeft > 0) {
-      interval = setInterval(() => {
-        setTimeLeft(time => time - 1);
-      }, 1000);
-    } else if (timeLeft === 0 && isRunning) {
-      setIsRunning(false);
-      onStateChange?.(false);
-    }
-
+    const next = createCountdownController(durationMs, {
+      now: () => performance.now(),
+      every: (callback, milliseconds) => {
+        const interval = window.setInterval(callback, milliseconds);
+        return () => window.clearInterval(interval);
+      },
+      onVisible: callback => {
+        const onVisibilityChange = () => {
+          if (document.visibilityState === "visible") callback();
+        };
+        document.addEventListener("visibilitychange", onVisibilityChange);
+        return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+      },
+    }, {
+      remaining: seconds => {
+        setTimeLeft(seconds);
+        callbacks.current.onRemainingChange?.(seconds);
+      },
+      running: running => {
+        setIsRunning(running);
+        callbacks.current.onStateChange?.(running);
+      },
+    });
+    controller.current = next;
     return () => {
-      if (interval) clearInterval(interval);
+      next.dispose();
+      controller.current = null;
     };
-  }, [isRunning, timeLeft]);
+  }, [durationMs]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -47,10 +65,8 @@ export default function Timer({
   };
 
   const handleStart = () => {
-    if (!isRunning && !canStart) return;
-    const newRunningState = !isRunning;
-    setIsRunning(newRunningState);
-    onStateChange?.(newRunningState);
+    if (isRunning) controller.current?.pause();
+    else if (canStart && timeLeft > 0) controller.current?.start();
   };
 
 
@@ -75,7 +91,7 @@ export default function Timer({
           variant={isRunning ? "default" : "timer"}
           size="lg"
           onClick={handleStart}
-          disabled={!isRunning && !canStart}
+          disabled={!isRunning && (!canStart || timeLeft === 0)}
           className={`flex items-center space-x-2 h-12 px-6 transition-all duration-300 ${
             isRunning ? 'bg-primary hover:bg-primary/90 text-primary-foreground' : ''
           }`}

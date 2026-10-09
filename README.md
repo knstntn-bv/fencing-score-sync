@@ -6,11 +6,11 @@ Live site: [fencing-scorer.konbo.me](https://fencing-scorer.konbo.me/)
 
 ## What it does
 
-- Scoreboard with blue/red sides, period timer, and a 1-second hold Reset
+- Scoreboard with blue/red sides, period timer, and a 0.5-second hold Reset
 - Email/password login to manage fencers and save named bouts
 - **Quick bout** from the login screen: anonymous timer and scores, no Save, no roster
 - Local time/points limits (default 90 seconds / 12 points)
-- Offline Save queue: named results wait in `localStorage` and upload when the network is back
+- Durable Save queue: named results commit to IndexedDB before uploading; failed uploads stay queued with a Retry button
 - History and per-fencer stats from saved scorelines (`win` / `lose` / `draw`)
 
 The running bout never depends on Wi-Fi. Only roster CRUD and saved matches talk to the database.
@@ -44,6 +44,21 @@ npm run dev
 Dev server: [http://localhost:8080/](http://localhost:8080/).
 
 Without `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` the app stays fully local: scoreboard and settings work, club pages show a “connect Supabase” message, and there is no login screen.
+
+## Validation
+
+Run the same checks as CI before opening a pull request:
+
+```sh
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+Lint rejects warnings as well as errors. Typecheck covers the app and Vite configuration. Tests cover the timer, wake locks, and match outbox without connecting to Supabase.
+
+GitHub Actions runs all four checks in the `build` job on pull requests and pushes to `main`. Pull requests do not deploy; publishing requires the full job to succeed. The `Protect main` ruleset should require the `build` check and an up-to-date PR branch.
 
 ## Supabase
 

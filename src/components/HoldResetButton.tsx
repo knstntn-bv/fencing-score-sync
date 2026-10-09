@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const HOLD_MS = 1000;
+const HOLD_MS = 500;
 
 type HoldResetButtonProps = {
   disabled: boolean;

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { FencerStatsCard } from "@/components/FencerStatsCard";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/context/auth";
 import { useFencers } from "@/hooks/useFencers";
 import { useMatches } from "@/hooks/useMatches";
 import { computeFencerStats } from "@/lib/fencerStats";

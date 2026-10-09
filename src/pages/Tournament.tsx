@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/context/auth";
 import { useTournament } from "@/hooks/useTournament";
 import { formatStandingPoints } from "@/lib/tournament/standings";
 import {
@@ -187,9 +187,15 @@ export default function TournamentPage() {
           roster={tournament.roster.active}
           rosterLoading={tournament.roster.isLoading}
           busy={checkInBusy}
-          onCheckIn={(fencerId) => tournament.checkIn.mutateAsync(fencerId)}
-          onCheckInGuest={(input) => tournament.checkInGuest.mutateAsync(input)}
-          onCheckInById={(publicId) => tournament.checkInById.mutateAsync(publicId)}
+          onCheckIn={async (fencerId) => {
+            await tournament.checkIn.mutateAsync(fencerId);
+          }}
+          onCheckInGuest={async (input) => {
+            await tournament.checkInGuest.mutateAsync(input);
+          }}
+          onCheckInById={async (publicId) => {
+            await tournament.checkInById.mutateAsync(publicId);
+          }}
           onCheckOut={(fencerId) => tournament.checkOut.mutateAsync(fencerId)}
           errorMessage={tournament.mutationError}
         />

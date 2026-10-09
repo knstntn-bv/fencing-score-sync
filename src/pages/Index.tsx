@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Settings, Trophy } from "lucide-react";
 import { toast } from "sonner";
@@ -22,11 +22,10 @@ import SaveResultButton from "@/components/SaveResultButton";
 import HoldResetButton from "@/components/HoldResetButton";
 import { useKeepAwake } from "@/hooks/useKeepAwake";
 import { useFencers } from "@/hooks/useFencers";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/context/auth";
 import { boutSelectionMessage, resolveBoutSelection } from "@/lib/boutSelection";
 import { nextWinnerState, scoreLeader, scoreResults } from "@/lib/boutOutcome";
 import { fencerErrorMessage } from "@/lib/fencers";
-import { MATCHES_QUERY_KEY } from "@/hooks/useMatches";
 import {
   TOURNAMENT_BOUTS_QUERY_KEY,
   TOURNAMENT_QUERY_KEY,
@@ -34,9 +33,9 @@ import {
   useTournamentSlot,
 } from "@/hooks/useTournament";
 import { useTournaments } from "@/hooks/useTournaments";
-import { useMatchOutboxCount } from "@/hooks/useMatchOutbox";
+import { useMatchOutbox } from "@/context/outbox";
 import { enqueueMatchOutbox } from "@/lib/matchOutbox";
-import { newMatchId, saveMatch } from "@/lib/matches";
+import { newMatchId } from "@/lib/matches";
 import { isNetworkError } from "@/lib/networkError";
 import { insertKothBout, saveTournamentBout } from "@/lib/tournamentBouts";
 import { kothChallengerIds } from "@/lib/tournament/kingOfHill";
@@ -58,7 +57,8 @@ const Index = ({ settings }: IndexProps) => {
   const showClubChrome = !localOnlyBoard;
   const { active } = useFencers();
   const queryClient = useQueryClient();
-  const pendingUploads = useMatchOutboxCount(clubId ?? undefined);
+  const outbox = useMatchOutbox();
+  const pendingUploads = outbox.entries.length;
   const [params] = useSearchParams();
   const tournamentId = params.get("t");
   const boutId = params.get("b");
@@ -151,19 +151,15 @@ const Index = ({ settings }: IndexProps) => {
   const incrementPlayer2 = () => applyScores(player1Score, player2Score + 1);
   const decrementPlayer2 = () => applyScores(player1Score, Math.max(0, player2Score - 1));
 
-  const snapshotNames = () => {
-    setBlueNameSnap(liveBlueName);
-    setRedNameSnap(liveRedName);
-  };
-
-  const handleTimerStateChange = (isRunning: boolean) => {
+  const handleTimerStateChange = useCallback((isRunning: boolean) => {
     setIsTimerRunning(isRunning);
     if (isRunning && !hasMatchStarted) {
       setHasMatchStarted(true);
-      snapshotNames();
+      setBlueNameSnap(liveBlueName);
+      setRedNameSnap(liveRedName);
       setStartedAt(new Date().toISOString());
     }
-  };
+  }, [hasMatchStarted, liveBlueName, liveRedName]);
 
   useEffect(() => {
     if (!tournamentSlot || !slotBoutId || !slot.bout) {
@@ -355,24 +351,12 @@ const Index = ({ settings }: IndexProps) => {
       finishedAt: new Date().toISOString(),
     };
     try {
-      if (!navigator.onLine) {
-        enqueueMatchOutbox(clubId, payload);
-        setSaved(true);
-        toast.message("Saved on this device. Will upload when you're online.");
-        return;
-      }
-      await saveMatch(payload);
-      await queryClient.invalidateQueries({ queryKey: [...MATCHES_QUERY_KEY, clubId] });
+      await enqueueMatchOutbox(clubId, payload);
       setSaved(true);
-      toast.success(blueResult === "draw" ? "Draw saved" : "Victory saved");
+      toast.message("Saved on this device. Waiting to upload.");
+      if (navigator.onLine) void outbox.retry();
     } catch (error) {
-      if (isNetworkError(error)) {
-        enqueueMatchOutbox(clubId, payload);
-        setSaved(true);
-        toast.message("Saved on this device. Will upload when you're online.");
-        return;
-      }
-      toast.error(fencerErrorMessage(error, "Could not save the bout."));
+      toast.error(`Result not saved. ${fencerErrorMessage(error, "Device storage is unavailable. Please try again.")}`);
     } finally {
       setSaving(false);
     }
@@ -528,11 +512,18 @@ const Index = ({ settings }: IndexProps) => {
               ? `${winnerLabel} won — timer stays paused`
               : `First to ${pointsLimit} points wins`}
           </div>
-          {localOnlyBoard || tournamentSlot || kothBoard || pendingUploads === 0 ? null : (
+          {localOnlyBoard || tournamentSlot || kothBoard || (pendingUploads === 0 && !outbox.error) ? null : (
             <div className="text-sm text-muted-foreground">
-              {pendingUploads === 1
-                ? "1 bout will upload when you're online."
-                : `${pendingUploads} bouts will upload when you're online.`}
+              {pendingUploads > 0 ? <p>{pendingUploads === 1
+                ? "1 bout saved on this device, waiting to upload."
+                : `${pendingUploads} bouts saved on this device, waiting to upload.`}</p> : null}
+              {outbox.error ? <p role="alert" className="text-destructive mt-1">
+                Upload failed. Queued results were kept. {outbox.error}
+              </p> : null}
+              <Button variant="outline" size="sm" className="mt-2" disabled={outbox.busy}
+                onClick={() => void outbox.retry()}>
+                {outbox.busy ? "Uploading…" : "Retry upload"}
+              </Button>
             </div>
           )}
         </div>

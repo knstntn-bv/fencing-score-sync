@@ -1,36 +1,15 @@
-import { useEffect } from 'react';
-import { KeepAwake } from '@capacitor-community/keep-awake';
+import { useEffect } from "react";
+import { Capacitor } from "@capacitor/core";
+import { KeepAwake } from "@capacitor-community/keep-awake";
+import { acquireScreenWakeLock, createNativeWakeLockQueue } from "@/lib/screenWakeLock";
+
+const nativeWakeLock = createNativeWakeLockQueue(KeepAwake);
 
 export const useKeepAwake = (enabled: boolean) => {
   useEffect(() => {
-    const enableKeepAwake = async () => {
-      try {
-        if (enabled) {
-          await KeepAwake.keepAwake();
-        } else {
-          await KeepAwake.allowSleep();
-        }
-      } catch (error) {
-        // Fallback for web - use Screen Wake Lock API if available
-        if ('wakeLock' in navigator && enabled) {
-          try {
-            await (navigator as any).wakeLock.request('screen');
-          } catch (wakeLockError) {
-            console.log('Wake lock not supported or failed');
-          }
-        }
-      }
-    };
-
-    enableKeepAwake();
-
-    // Cleanup on unmount
-    return () => {
-      if (!enabled) {
-        KeepAwake.allowSleep().catch(() => {
-          // Ignore cleanup errors
-        });
-      }
-    };
+    if (!enabled) return;
+    if (Capacitor.isNativePlatform()) return nativeWakeLock();
+    if (!("wakeLock" in navigator)) return;
+    return acquireScreenWakeLock(navigator.wakeLock, document);
   }, [enabled]);
 };

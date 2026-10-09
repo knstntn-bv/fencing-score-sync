@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/context/auth";
 import { useMatches } from "@/hooks/useMatches";
 import { listHistoryPeople, matchOutcomeLabel } from "@/lib/matches";
 import { StatsPanel } from "@/components/StatsPanel";

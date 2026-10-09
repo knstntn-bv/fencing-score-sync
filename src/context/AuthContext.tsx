@@ -1,7 +1,6 @@
+import { AuthContext, type AuthContextValue } from "./auth";
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -39,32 +38,6 @@ function writeGuestBout(on: boolean): void {
   }
 }
 
-type AuthContextValue = {
-  configured: boolean;
-  loading: boolean;
-  session: Session | null;
-  user: User | null;
-  personName: string | null;
-  personPublicId: string | null;
-  clubId: string | null;
-  clubName: string | null;
-  clubRole: ClubMemberRole | null;
-  accountError: string | null;
-  retryAccount: () => void;
-  guestBout: boolean;
-  enterGuestBout: () => void;
-  exitGuestBout: () => void;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: string | null; needsEmailConfirmation: boolean }>;
-  signOut: () => Promise<void>;
-  saveName: (name: string) => Promise<{ error: string | null }>;
-  createClub: (name: string) => Promise<{ error: string | null }>;
-  renameClub: (name: string) => Promise<{ error: string | null }>;
-  leaveClub: () => Promise<{ error: string | null }>;
-  completeSetup: (name: string, clubName: string | null) => Promise<{ error: string | null }>;
-};
-
-const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [sessionLoading, setSessionLoading] = useState(isSupabaseConfigured);
@@ -333,12 +306,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error("useAuth must be used within AuthProvider");
-  }
-  return ctx;
 }

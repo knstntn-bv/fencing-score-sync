@@ -1,4 +1,4 @@
-# Build the TypeScript/Vite app and publish dist/ to GitHub Pages.
+# Validate the app, then build and publish dist/ to GitHub Pages.
 # After merge: Settings → Pages → Source → GitHub Actions.
 # Custom domain (CNAME) is fencing-scorer.konbo.me.
 name: Deploy GitHub Pages
@@ -33,6 +33,15 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
 
       - name: Build
         run: npm run build
