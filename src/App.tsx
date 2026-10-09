@@ -7,7 +7,7 @@ import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import AuthGate from "@/components/AuthGate";
 import ClubRoute from "@/components/ClubRoute";
-import { useMatchOutboxFlush } from "@/hooks/useMatchOutbox";
+import { OutboxProvider } from "@/components/OutboxProvider";
 import { readSettings, writeSettings, type ClubSettings } from "@/lib/settings";
 import Index from "./pages/Index";
 import Settings from "./pages/Settings";
@@ -20,11 +20,6 @@ import Tournament from "./pages/Tournament";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
-
-function OutboxFlush() {
-  useMatchOutboxFlush();
-  return null;
-}
 
 const App = () => {
   const [settings, setSettings] = useState<ClubSettings>(readSettings);
@@ -39,7 +34,7 @@ const App = () => {
         <Toaster />
         <Sonner />
         <AuthProvider>
-          <OutboxFlush />
+          <OutboxProvider>
           <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <AuthGate>
               <Routes>
@@ -99,6 +94,7 @@ const App = () => {
               </Routes>
             </AuthGate>
           </BrowserRouter>
+          </OutboxProvider>
         </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>

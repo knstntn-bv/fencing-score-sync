@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/context/auth";
 import { HELP_PAGE_FILE, isHelpRoute } from "@/lib/helpPage";
 import Login from "@/pages/Login";
 import Onboarding from "@/pages/Onboarding";

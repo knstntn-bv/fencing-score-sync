@@ -4,7 +4,7 @@ import { BarChart3 } from "lucide-react";
 import { ClubPageHeader } from "@/components/ClubNav";
 import { FencerStatsCard } from "@/components/FencerStatsCard";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/context/auth";
 import { useFencers } from "@/hooks/useFencers";
 import { useMatches } from "@/hooks/useMatches";
 import { statsForFencer } from "@/lib/fencerStats";

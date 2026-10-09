@@ -27,7 +27,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/context/auth";
 import { useFencers } from "@/hooks/useFencers";
 import { isLinkedFencer } from "@/lib/fencers";
 import { lookupCheckinByPublicId, normalizePublicId, type CheckInLookup } from "@/lib/tournaments";

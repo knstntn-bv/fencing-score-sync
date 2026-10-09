@@ -104,7 +104,14 @@ export async function saveMatch(input: SaveMatchInput): Promise<Match> {
 
   if (error) {
     if (isDuplicateMatchError(error)) {
-      return mapMatchFromInput(input);
+      const existing = await requireSupabase()
+        .from("matches")
+        .select("*")
+        .eq("id", input.id)
+        .eq("club_id", input.clubId)
+        .maybeSingle();
+      if (existing.error) throw existing.error;
+      if (existing.data) return mapMatch(existing.data);
     }
     throw error;
   }
